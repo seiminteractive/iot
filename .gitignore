@@ -1,0 +1,29 @@
+node_modules/
+dist/
+*.log
+.env
+.env.local
+.env.production
+
+# Secrets (IMPORTANTE!)
+secrets/*.pem.crt
+secrets/*.pem.key
+secrets/*.pem
+secrets/db_password.txt
+
+# Keep examples
+!secrets/*.example
+!secrets/README.md
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Docker
+*.pid

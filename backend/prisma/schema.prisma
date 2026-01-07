@@ -1,0 +1,70 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Machine {
+  id         String   @id @default(uuid()) @db.Uuid
+  site       String
+  machineId  String   @map("machine_id")
+  name       String?
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  telemetryEvents TelemetryEvent[]
+  state           MachineState?
+  alarms          Alarm[]
+
+  @@unique([site, machineId])
+  @@map("machines")
+}
+
+model TelemetryEvent {
+  id         String   @id @default(uuid()) @db.Uuid
+  machineId  String   @map("machine_id") @db.Uuid
+  ts         DateTime @db.Timestamptz
+  topic      String
+  valuesJson Json     @map("values_json") @db.JsonB
+  rawJson    Json     @map("raw_json") @db.JsonB
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  machine Machine @relation(fields: [machineId], references: [id], onDelete: Cascade)
+
+  @@index([machineId, ts(sort: Desc)])
+  @@index([ts(sort: Desc)])
+  @@map("telemetry_events")
+}
+
+model MachineState {
+  machineId      String   @id @map("machine_id") @db.Uuid
+  lastTs         DateTime @map("last_ts") @db.Timestamptz
+  lastValuesJson Json     @map("last_values_json") @db.JsonB
+  updatedAt      DateTime @updatedAt @map("updated_at") @db.Timestamptz
+
+  machine Machine @relation(fields: [machineId], references: [id], onDelete: Cascade)
+
+  @@map("machine_state")
+}
+
+model Alarm {
+  id        String   @id @default(uuid()) @db.Uuid
+  machineId String   @map("machine_id") @db.Uuid
+  ts        DateTime @db.Timestamptz
+  type      String
+  message   String
+  severity  String
+  acknowledged Boolean @default(false)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  machine Machine @relation(fields: [machineId], references: [id], onDelete: Cascade)
+
+  @@index([machineId, ts(sort: Desc)])
+  @@index([acknowledged, severity])
+  @@map("alarms")
+}

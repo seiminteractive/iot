@@ -1,0 +1,131 @@
+version: '3.9'
+
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: iot-telemetry-db
+    environment:
+      POSTGRES_DB: iot_telemetry
+      POSTGRES_USER: iot_user
+      POSTGRES_PASSWORD_FILE: /run/secrets/db_password
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    secrets:
+      - db_password
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U iot_user -d iot_telemetry"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    networks:
+      - iot-network
+
+  migrator:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: iot-telemetry-migrator
+    command: npx prisma migrate deploy
+    environment:
+      DATABASE_URL: postgresql://iot_user:${DB_PASSWORD}@db:5432/iot_telemetry?schema=public
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - iot-network
+
+  api:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: iot-telemetry-api
+    ports:
+      - "127.0.0.1:3002:3002"
+    environment:
+      NODE_ENV: production
+      PORT: 3002
+      DATABASE_URL: postgresql://iot_user:${DB_PASSWORD}@db:5432/iot_telemetry?schema=public
+      AWS_IOT_ENDPOINT: ${AWS_IOT_ENDPOINT}
+      AWS_IOT_CLIENT_ID: ${AWS_IOT_CLIENT_ID}
+      AWS_IOT_CERT_PATH: /run/secrets/aws_iot_cert
+      AWS_IOT_KEY_PATH: /run/secrets/aws_iot_key
+      AWS_IOT_CA_PATH: /run/secrets/aws_iot_ca
+      MQTT_TOPICS_TELEMETRY: ${MQTT_TOPICS_TELEMETRY:-factory/+/+/telemetry}
+      MQTT_TOPICS_STATUS: ${MQTT_TOPICS_STATUS:-factory/+/+/status}
+      CORS_ORIGIN: ${CORS_ORIGIN:-https://testingiot.seiminteractive.io}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+    secrets:
+      - aws_iot_cert
+      - aws_iot_key
+      - aws_iot_ca
+    depends_on:
+      db:
+        condition: service_healthy
+      migrator:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:3002/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 512M
+    networks:
+      - iot-network
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: iot-telemetry-frontend
+    ports:
+      - "127.0.0.1:8082:80"
+    depends_on:
+      - api
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:80"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    restart: unless-stopped
+    networks:
+      - iot-network
+
+  nginx:
+    image: nginx:alpine
+    container_name: iot-telemetry-nginx
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - /etc/letsencrypt:/etc/letsencrypt:ro
+    depends_on:
+      - api
+      - frontend
+    restart: unless-stopped
+    networks:
+      - iot-network
+
+secrets:
+  aws_iot_cert:
+    file: ./secrets/certificate.pem.crt
+  aws_iot_key:
+    file: ./secrets/private.pem.key
+  aws_iot_ca:
+    file: ./secrets/AmazonRootCA1.pem
+  db_password:
+    file: ./secrets/db_password.txt
+
+volumes:
+  postgres_data:
+
+networks:
+  iot-network:
+    driver: bridge
