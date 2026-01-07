@@ -30,8 +30,8 @@ FROM node:20-alpine
 
 WORKDIR /app
 
-# Install runtime dependencies for AWS IoT SDK
-RUN apk add --no-cache libstdc++
+# Install runtime dependencies for AWS IoT SDK and Prisma
+RUN apk add --no-cache libstdc++ openssl openssl1.1-compat
 
 # Copy package files
 COPY package*.json ./
