@@ -4,10 +4,9 @@ const WS_URL = import.meta.env.VITE_WS_URL || 'ws://localhost:3002';
 
 export function useWebSocket() {
   const ws = ref(null);
-  const messages = ref([]);
   const connected = ref(false);
 
-  function connect(onConnectionChange = null) {
+  function connect({ onConnectionChange = null, onMessage = null } = {}) {
     try {
       ws.value = new WebSocket(`${WS_URL}/ws`);
 
@@ -22,12 +21,7 @@ export function useWebSocket() {
           const message = JSON.parse(event.data);
           
           if (message.type !== 'ping' && message.type !== 'connected') {
-            messages.value.push(message);
-            
-            // Keep only last 100 messages
-            if (messages.value.length > 100) {
-              messages.value = messages.value.slice(-100);
-            }
+            if (onMessage) onMessage(message);
           }
         } catch (error) {
           console.error('Error parsing WebSocket message:', error);
@@ -46,7 +40,7 @@ export function useWebSocket() {
         // Attempt to reconnect after 5 seconds
         setTimeout(() => {
           console.log('Attempting to reconnect...');
-          connect(onConnectionChange);
+          connect({ onConnectionChange, onMessage });
         }, 5000);
       };
     } catch (error) {
@@ -75,7 +69,6 @@ export function useWebSocket() {
     connect,
     disconnect,
     send,
-    messages,
     connected,
   };
 }
