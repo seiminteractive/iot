@@ -55,6 +55,7 @@
               :label="formatLabel(metric.id)"
               :value="metric.value"
               :max="metric.max || 100"
+              :unit="getGaugeUnit(metric.id)"
             />
           </div>
         </div>
@@ -200,6 +201,15 @@ export default {
       return parts[parts.length - 1] || id;
     }
 
+    function getGaugeUnit(id) {
+      if (id.includes('Porcentaje') || id.includes('Eficiencia')) {
+        return '%';
+      } else if (id.includes('Velocidad')) {
+        return 'mph';
+      }
+      return '';
+    }
+
     function countValues(values) {
       if (!values || typeof values !== 'object') return 0;
       return Object.keys(values).length;
@@ -267,6 +277,7 @@ export default {
       showDataStream,
       formatTime,
       formatLabel,
+      getGaugeUnit,
       countValues,
     };
   },
