@@ -2,10 +2,6 @@
   <div class="gauge-container">
     <div class="gauge-title">{{ formatTitle(label) }}</div>
     <VChart :option="option" autoresize style="height: 220px; width: 100%" />
-    <div class="gauge-value-unit">
-      <span class="gauge-value">{{ formatValue(value) }}</span>
-      <span class="gauge-unit">{{ unit }}</span>
-    </div>
   </div>
 </template>
 
@@ -107,7 +103,7 @@ export default {
             valueAnimation: true,
             formatter: (value) => {
               const formatted = (Math.round(value * 10) / 10).toFixed(1);
-              return formatted;
+              return formatted + (props.unit ? ' ' + props.unit : '');
             },
             color: '#ffffff',
             fontSize: 16,
@@ -158,19 +154,5 @@ export default {
   font-size: 0.85rem;
   color: #888888;
   font-weight: 500;
-}
-
-.gauge-value-unit {
-  display: flex;
-  align-items: baseline;
-  gap: 0.3rem;
-  justify-content: center;
-}
-
-.gauge-value {
-  font-size: 1.2rem;
-  font-weight: 700;
-  color: #ffffff;
-  font-family: 'Monaco', 'Courier New', monospace;
 }
 </style>
