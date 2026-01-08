@@ -69,7 +69,20 @@
               <span class="timestamp">{{ formatTime(event.ts) }}</span>
             </div>
             <div class="item-data">
-              <pre>{{ JSON.stringify(event.values, null, 2) }}</pre>
+              <div v-if="hasValidValues(event.values)" class="values-grid">
+                <div v-for="(data, key) in event.values" :key="key" class="value-item">
+                  <div class="value-key">{{ key }}</div>
+                  <div class="value-display">
+                    <div class="value-number">{{ formatValue(data.value !== undefined ? data.value : data) }}</div>
+                    <div v-if="data.quality !== undefined" class="value-quality">
+                      <span :class="['quality-badge', data.quality ? 'good' : 'bad']">
+                        {{ data.quality ? 'Good' : 'Bad' }}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <pre v-else>{{ JSON.stringify(event.values, null, 2) }}</pre>
             </div>
           </div>
         </div>
@@ -138,6 +151,27 @@ export default {
       });
     }
 
+    function formatValue(value) {
+      if (typeof value === 'number') {
+        // Si es un decimal, mostrar máximo 2 decimales
+        return Number.isInteger(value) ? value : value.toFixed(2);
+      }
+      return value;
+    }
+
+    function hasValidValues(values) {
+      if (!values || typeof values !== 'object') return false;
+      // Verificar si es el formato de KepServer {key: {value, quality, timestamp}}
+      const keys = Object.keys(values);
+      if (keys.length === 0) return false;
+      
+      // Verificar si al menos una propiedad tiene estructura KepServer
+      return keys.some(key => {
+        const item = values[key];
+        return item && typeof item === 'object' && ('value' in item || 'v' in item);
+      });
+    }
+
     function handleNewMessage(msg) {
       if (msg.type === 'telemetry' || msg.type === 'status') {
         console.log('📨 New telemetry message:', msg);
@@ -151,10 +185,7 @@ export default {
           values: msg.values,
         });
 
-        // Keep only last 100 events
-        if (telemetryEvents.value.length > 100) {
-          telemetryEvents.value = telemetryEvents.value.slice(0, 100);
-        }
+        // Sin límite - acumular todos los eventos
 
         // Reload machines to update state
         loadMachines();
@@ -204,6 +235,8 @@ export default {
       wsConnected,
       lastEventTime,
       formatTime,
+      formatValue,
+      hasValidValues,
     };
   },
 };
@@ -447,6 +480,80 @@ main {
   font-size: 0.85rem;
   color: #666666;
   font-family: 'Monaco', 'Courier New', monospace;
+}
+
+.item-data {
+  width: 100%;
+}
+
+.values-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 1rem;
+}
+
+.value-item {
+  background: linear-gradient(135deg, #111111 0%, #0a0a0a 100%);
+  border: 1px solid #222222;
+  border-radius: 10px;
+  padding: 1rem;
+  transition: all 0.3s ease;
+}
+
+.value-item:hover {
+  border-color: #333333;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+  transform: translateY(-2px);
+}
+
+.value-key {
+  font-size: 0.75rem;
+  color: #666666;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 0.75rem;
+  font-weight: 500;
+}
+
+.value-display {
+  display: flex;
+  align-items: baseline;
+  gap: 0.75rem;
+  justify-content: space-between;
+}
+
+.value-number {
+  font-size: 1.8rem;
+  font-weight: 700;
+  color: #ffffff;
+  font-family: 'Monaco', 'Courier New', monospace;
+  letter-spacing: -0.5px;
+}
+
+.value-quality {
+  display: flex;
+  align-items: center;
+}
+
+.quality-badge {
+  font-size: 0.65rem;
+  padding: 0.25rem 0.5rem;
+  border-radius: 4px;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+  text-transform: uppercase;
+}
+
+.quality-badge.good {
+  background: rgba(16, 185, 129, 0.1);
+  color: #10b981;
+  border: 1px solid #10b981;
+}
+
+.quality-badge.bad {
+  background: rgba(239, 68, 68, 0.1);
+  color: #ef4444;
+  border: 1px solid #ef4444;
 }
 
 .item-data pre {
