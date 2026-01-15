@@ -128,12 +128,8 @@ class MQTTClient {
       return;
     }
 
-    // En desarrollo: suscribirse a todo para debuggear.
-    // En producción: usar los topics configurados.
-    const topics =
-      config.NODE_ENV === 'development'
-        ? ['#']
-        : [config.MQTT_TOPICS_TELEMETRY, config.MQTT_TOPICS_STATUS];
+    // Subscribe to configured topics from .env
+    const topics = [config.MQTT_TOPICS_TELEMETRY, config.MQTT_TOPICS_STATUS];
 
     for (const topic of topics) {
       this.client.subscribe(topic, { qos: 1 }, (error) => {

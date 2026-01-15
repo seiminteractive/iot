@@ -26,8 +26,8 @@ const envSchema = z.object({
   AWS_IOT_CERT_PATH: z.string(),
   AWS_IOT_KEY_PATH: z.string(),
   AWS_IOT_CA_PATH: z.string(),
-  MQTT_TOPICS_TELEMETRY: z.string().default('factory/+/+/telemetry'),
-  MQTT_TOPICS_STATUS: z.string().default('factory/+/+/status'),
+  MQTT_TOPICS_TELEMETRY: z.string().default('factory/+/+/+/+/telemetry'),
+  MQTT_TOPICS_STATUS: z.string().default('ops/+/+/+/gateway/+/status'),
   MQTT_QOS: z.string().transform(Number).default('1'),
   MQTT_KEEP_ALIVE: z.string().transform(Number).default('60'),
   MQTT_RECONNECT_PERIOD: z.string().transform(Number).default('5000'),
@@ -42,9 +42,14 @@ const envSchema = z.object({
   WS_HEARTBEAT_INTERVAL: z.string().transform(Number).default('30000'),
   WS_MAX_CONNECTIONS: z.string().transform(Number).default('1000'),
 
-  // Auth (optional)
-  JWT_SECRET: z.string().optional(),
-  JWT_EXPIRY: z.string().default('24h'),
+  // Auth (Firebase)
+  FIREBASE_PROJECT_ID: z.string(),
+  FIREBASE_CLIENT_EMAIL: z.string(),
+  FIREBASE_PRIVATE_KEY: z.string(),
+
+  // Redis
+  REDIS_URL: z.string().default('redis://localhost:6379'),
+  REDIS_PREFIX: z.string().default('iot'),
 });
 
 export type Config = z.infer<typeof envSchema>;

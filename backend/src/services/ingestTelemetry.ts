@@ -1,8 +1,9 @@
+import { Prisma } from '@prisma/client';
 import { prisma } from '../db/prisma.js';
 import { logger } from '../utils/logger.js';
 import { parseTopic } from '../mqtt/parseTopic.js';
-import { NormalizedMessage } from '../types/index.js';
-import { broadcastToClients } from '../ws/connectionManager.js';
+import { GatewayStatusMessage, NormalizedMessage } from '../types/index.js';
+import { broadcastToClients } from '../ws/broadcast.js';
 
 /**
  * Normalize incoming message to standard format
@@ -10,13 +11,20 @@ import { broadcastToClients } from '../ws/connectionManager.js';
 function normalizeMessage(topic: string, rawPayload: any): NormalizedMessage {
   const parsed = parseTopic(topic);
 
+  if (!parsed.tenant || !parsed.province || !parsed.plant || !parsed.machineId) {
+    throw new Error('Invalid telemetry topic format');
+  }
+
   // Check if already normalized (schema field present)
-  if (rawPayload.schema && rawPayload.machineId && rawPayload.site && rawPayload.values) {
+  if (rawPayload.schema && rawPayload.machineId && rawPayload.values && rawPayload.ts) {
     return {
       schema: rawPayload.schema,
+      tenant: parsed.tenant,
+      province: parsed.province,
+      plant: parsed.plant,
       machineId: rawPayload.machineId,
-      site: rawPayload.site,
-      ts: rawPayload.ts || Date.now(),
+      ts: rawPayload.ts,
+      seq: typeof rawPayload.seq === 'number' ? rawPayload.seq : undefined,
       values: rawPayload.values,
       topic,
       raw: rawPayload,
@@ -26,11 +34,10 @@ function normalizeMessage(topic: string, rawPayload: any): NormalizedMessage {
   // Handle KepServer/OPC format: { timestamp, values: [{ id, v, q, t }] }
   if (rawPayload.timestamp && Array.isArray(rawPayload.values)) {
     const convertedValues: Record<string, any> = {};
-    
+
     for (const item of rawPayload.values) {
       if (item.id && item.v !== undefined) {
         // Convert OPC format to simple key-value
-        // id: "Simulation Examples.Functions.Ramp1" → "Ramp1"
         const key = item.id.split('.').pop() || item.id;
         convertedValues[key] = {
           value: item.v,
@@ -42,9 +49,12 @@ function normalizeMessage(topic: string, rawPayload: any): NormalizedMessage {
 
     return {
       schema: 1,
+      tenant: parsed.tenant,
+      province: parsed.province,
+      plant: parsed.plant,
       machineId: parsed.machineId,
-      site: parsed.site,
       ts: rawPayload.timestamp,
+      seq: typeof rawPayload.seq === 'number' ? rawPayload.seq : undefined,
       values: convertedValues,
       topic,
       raw: rawPayload,
@@ -54,11 +64,37 @@ function normalizeMessage(topic: string, rawPayload: any): NormalizedMessage {
   // Convert simple key-value format (fallback)
   return {
     schema: 1,
+    tenant: parsed.tenant,
+    province: parsed.province,
+    plant: parsed.plant,
     machineId: parsed.machineId,
-    site: parsed.site,
     ts: Date.now(),
+    seq: typeof rawPayload.seq === 'number' ? rawPayload.seq : undefined,
     values: rawPayload,
     topic,
+    raw: rawPayload,
+  };
+}
+
+function normalizeGatewayStatus(topic: string, rawPayload: any): GatewayStatusMessage {
+  const parsed = parseTopic(topic);
+
+  if (!parsed.tenant || !parsed.province || !parsed.plant || !parsed.thingName) {
+    throw new Error('Invalid gateway status topic format');
+  }
+
+  const timestamp = rawPayload.timestamp || Date.now();
+  const state = rawPayload.state === 'offline' ? 'offline' : 'online';
+
+  return {
+    tenant: parsed.tenant,
+    province: parsed.province,
+    plant: parsed.plant,
+    thingName: parsed.thingName,
+    ts: timestamp,
+    state,
+    version: rawPayload.gateway?.version,
+    uptimeSec: rawPayload.gateway?.uptimeSec,
     raw: rawPayload,
   };
 }
@@ -68,37 +104,144 @@ function normalizeMessage(topic: string, rawPayload: any): NormalizedMessage {
  */
 export async function ingestTelemetry(topic: string, rawPayload: any): Promise<void> {
   try {
+    const parsed = parseTopic(topic);
+
+    if (parsed.type === 'gateway_status') {
+      const status = normalizeGatewayStatus(topic, rawPayload);
+
+      const tenant = await prisma.tenant.findUnique({
+        where: { slug: status.tenant },
+      });
+
+      if (!tenant) {
+        logger.warn({ topic, tenant: status.tenant }, 'Tenant not found for gateway status');
+        return;
+      }
+
+      const plant = await prisma.plant.findFirst({
+        where: {
+          tenantId: tenant.id,
+          plantId: status.plant,
+          province: status.province,
+        },
+      });
+
+      if (!plant) {
+        logger.warn({ topic, plant: status.plant }, 'Plant not found for gateway status');
+        return;
+      }
+
+      await prisma.gateway.upsert({
+        where: {
+          tenantId_thingName: {
+            tenantId: tenant.id,
+            thingName: status.thingName,
+          },
+        },
+        create: {
+          tenantId: tenant.id,
+          plantId: plant.id,
+          thingName: status.thingName,
+          state: status.state,
+          version: status.version,
+          uptimeSec: status.uptimeSec,
+          lastSeenAt: new Date(status.ts),
+        },
+        update: {
+          plantId: plant.id,
+          state: status.state,
+          version: status.version,
+          uptimeSec: status.uptimeSec,
+          lastSeenAt: new Date(status.ts),
+        },
+      });
+
+      await broadcastToClients({
+        type: 'gateway_status',
+        tenant: status.tenant,
+        plant: status.plant,
+        thingName: status.thingName,
+        ts: status.ts,
+      });
+
+      return;
+    }
+
+    if (parsed.type !== 'telemetry') {
+      logger.warn({ topic }, 'Unknown topic type, skipping');
+      return;
+    }
+
     // Normalize message
     const normalized = normalizeMessage(topic, rawPayload);
-
     logger.debug({ normalized }, 'Normalized message');
+
+    const tenant = await prisma.tenant.findUnique({
+      where: { slug: normalized.tenant },
+    });
+
+    if (!tenant) {
+      logger.warn({ topic, tenant: normalized.tenant }, 'Tenant not found for telemetry');
+      return;
+    }
+
+    const plant = await prisma.plant.findFirst({
+      where: {
+        tenantId: tenant.id,
+        plantId: normalized.plant,
+        province: normalized.province,
+      },
+    });
+
+    if (!plant) {
+      logger.warn({ topic, plant: normalized.plant }, 'Plant not found for telemetry');
+      return;
+    }
 
     // Upsert machine
     const machine = await prisma.machine.upsert({
       where: {
-        site_machineId: {
-          site: normalized.site,
+        tenantId_plantId_machineId: {
+          tenantId: tenant.id,
+          plantId: plant.id,
           machineId: normalized.machineId,
         },
       },
       create: {
-        site: normalized.site,
+        tenantId: tenant.id,
+        plantId: plant.id,
         machineId: normalized.machineId,
-        name: normalized.machineId, // Default name
+        name: normalized.machineId,
       },
       update: {},
     });
 
-    // Insert telemetry event
-    await prisma.telemetryEvent.create({
-      data: {
-        machineId: machine.id,
-        ts: new Date(normalized.ts),
-        topic: normalized.topic,
-        valuesJson: normalized.values,
-        rawJson: normalized.raw,
-      },
-    });
+    const idempotencyKey = typeof normalized.seq === 'number'
+      ? `${normalized.tenant}|${normalized.province}|${normalized.plant}|${normalized.machineId}|${normalized.seq}`
+      : null;
+
+    // Insert telemetry event (idempotent when seq is present)
+    try {
+      await prisma.telemetryEvent.create({
+        data: {
+          tenantId: tenant.id,
+          plantId: plant.id,
+          machineId: machine.id,
+          ts: new Date(normalized.ts),
+          topic: normalized.topic,
+          seq: normalized.seq,
+          idempotencyKey,
+          valuesJson: normalized.values,
+          rawJson: normalized.raw,
+        },
+      });
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+        logger.warn({ idempotencyKey }, 'Duplicate telemetry ignored');
+        return;
+      }
+      throw error;
+    }
 
     // Update machine state
     await prisma.machineState.upsert({
@@ -107,6 +250,8 @@ export async function ingestTelemetry(topic: string, rawPayload: any): Promise<v
       },
       create: {
         machineId: machine.id,
+        tenantId: tenant.id,
+        plantId: plant.id,
         lastTs: new Date(normalized.ts),
         lastValuesJson: normalized.values,
       },
@@ -117,21 +262,19 @@ export async function ingestTelemetry(topic: string, rawPayload: any): Promise<v
     });
 
     logger.info(
-      { site: normalized.site, machineId: normalized.machineId },
+      { tenant: normalized.tenant, plant: normalized.plant, machineId: normalized.machineId },
       'Telemetry ingested successfully'
     );
 
     // Broadcast to WebSocket clients
-    const msgType = parseTopic(topic).type;
-    const wsType = msgType === 'status' ? 'status' : 'telemetry';
-    broadcastToClients({
-      type: wsType,
-      site: normalized.site,
+    await broadcastToClients({
+      type: 'telemetry',
+      tenant: normalized.tenant,
+      plant: normalized.plant,
       machineId: normalized.machineId,
       ts: normalized.ts,
       values: normalized.values,
     });
-
   } catch (error) {
     logger.error({ error, topic, rawPayload }, 'Failed to ingest telemetry');
     throw error;

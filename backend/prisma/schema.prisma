@@ -11,60 +11,137 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+model Tenant {
+  id        String   @id @default(uuid()) @db.Uuid
+  slug      String   @unique
+  name      String
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  plants          Plant[]
+  gateways        Gateway[]
+  machines        Machine[]
+  telemetryEvents TelemetryEvent[]
+  machineStates   MachineState[]
+  alarms          Alarm[]
+
+  @@map("tenants")
+}
+
+model Plant {
+  id        String   @id @default(uuid()) @db.Uuid
+  tenantId  String   @map("tenant_id") @db.Uuid
+  province  String
+  plantId   String   @map("plant_id")
+  name      String?
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  tenant          Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  machines        Machine[]
+  gateways        Gateway[]
+  telemetryEvents TelemetryEvent[]
+  machineStates   MachineState[]
+  alarms          Alarm[]
+
+  @@unique([tenantId, plantId])
+  @@index([tenantId, province])
+  @@map("plants")
+}
+
+model Gateway {
+  id         String   @id @default(uuid()) @db.Uuid
+  tenantId   String   @map("tenant_id") @db.Uuid
+  plantId    String   @map("plant_id") @db.Uuid
+  thingName  String   @map("thing_name")
+  state      String   @default("offline")
+  version    String?
+  uptimeSec  Int?     @map("uptime_sec")
+  lastSeenAt DateTime? @map("last_seen_at") @db.Timestamptz
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt  DateTime @updatedAt @map("updated_at") @db.Timestamptz
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  plant  Plant  @relation(fields: [plantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, thingName])
+  @@index([tenantId, plantId])
+  @@map("gateways")
+}
+
 model Machine {
   id         String   @id @default(uuid()) @db.Uuid
-  site       String
+  tenantId   String   @map("tenant_id") @db.Uuid
+  plantId    String   @map("plant_id") @db.Uuid
   machineId  String   @map("machine_id")
   name       String?
   createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  plant  Plant  @relation(fields: [plantId], references: [id], onDelete: Cascade)
 
   telemetryEvents TelemetryEvent[]
   state           MachineState?
   alarms          Alarm[]
 
-  @@unique([site, machineId])
+  @@unique([tenantId, plantId, machineId])
+  @@index([tenantId, plantId])
   @@map("machines")
 }
 
 model TelemetryEvent {
-  id         String   @id @default(uuid()) @db.Uuid
-  machineId  String   @map("machine_id") @db.Uuid
-  ts         DateTime @db.Timestamptz
-  topic      String
-  valuesJson Json     @map("values_json") @db.JsonB
-  rawJson    Json     @map("raw_json") @db.JsonB
-  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz
+  id             String   @id @default(uuid()) @db.Uuid
+  tenantId       String   @map("tenant_id") @db.Uuid
+  plantId        String   @map("plant_id") @db.Uuid
+  machineId      String   @map("machine_id") @db.Uuid
+  ts             DateTime @db.Timestamptz
+  topic          String
+  seq            Int?
+  idempotencyKey String?  @unique @map("idempotency_key")
+  valuesJson     Json     @map("values_json") @db.JsonB
+  rawJson        Json     @map("raw_json") @db.JsonB
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz
 
   machine Machine @relation(fields: [machineId], references: [id], onDelete: Cascade)
+  tenant  Tenant  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  plant   Plant   @relation(fields: [plantId], references: [id], onDelete: Cascade)
 
+  @@index([tenantId, plantId, ts(sort: Desc)])
   @@index([machineId, ts(sort: Desc)])
-  @@index([ts(sort: Desc)])
   @@map("telemetry_events")
 }
 
 model MachineState {
   machineId      String   @id @map("machine_id") @db.Uuid
+  tenantId       String   @map("tenant_id") @db.Uuid
+  plantId        String   @map("plant_id") @db.Uuid
   lastTs         DateTime @map("last_ts") @db.Timestamptz
   lastValuesJson Json     @map("last_values_json") @db.JsonB
   updatedAt      DateTime @updatedAt @map("updated_at") @db.Timestamptz
 
   machine Machine @relation(fields: [machineId], references: [id], onDelete: Cascade)
+  tenant  Tenant  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  plant   Plant   @relation(fields: [plantId], references: [id], onDelete: Cascade)
 
+  @@index([tenantId, plantId])
   @@map("machine_state")
 }
 
 model Alarm {
-  id        String   @id @default(uuid()) @db.Uuid
-  machineId String   @map("machine_id") @db.Uuid
-  ts        DateTime @db.Timestamptz
-  type      String
-  message   String
-  severity  String
-  acknowledged Boolean @default(false)
-  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+  id           String   @id @default(uuid()) @db.Uuid
+  tenantId     String   @map("tenant_id") @db.Uuid
+  plantId      String   @map("plant_id") @db.Uuid
+  machineId    String   @map("machine_id") @db.Uuid
+  ts           DateTime @db.Timestamptz
+  type         String
+  message      String
+  severity     String
+  acknowledged Boolean  @default(false)
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz
 
   machine Machine @relation(fields: [machineId], references: [id], onDelete: Cascade)
+  tenant  Tenant  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  plant   Plant   @relation(fields: [plantId], references: [id], onDelete: Cascade)
 
+  @@index([tenantId, plantId, ts(sort: Desc)])
   @@index([machineId, ts(sort: Desc)])
   @@index([acknowledged, severity])
   @@map("alarms")

@@ -1,0 +1,23 @@
+[
+  {
+    "uid": "RZPMoHz2N0gvsnidmfUnXn7HgvB2",
+    "email": "granixbsas@test.com",
+    "tenantId": "granix",
+    "role": "viewer",
+    "plantAccess": ["buenos-aires"]
+  },
+  {
+    "uid": "AQNaGLhubge11UAGDzloKkbGNtW2",
+    "email": "granixcba@test.com",
+    "tenantId": "granix",
+    "role": "viewer",
+    "plantAccess": ["cordoba"]
+  },
+  {
+    "uid": "KRMIlKXxDOYctT3gJEz5fUdOnn83",
+    "email": "granixceo@test.com",
+    "tenantId": "granix",
+    "role": "manager",
+    "plantAccess": ["*"]
+  }
+]

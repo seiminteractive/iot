@@ -5,6 +5,8 @@ import { config } from './config/env.js';
 import { logger } from './utils/logger.js';
 import { mqttClient } from './mqtt/client.js';
 import { connectionManager } from './ws/connectionManager.js';
+import authPlugin from './api/plugins/auth.js';
+import { initWsPubSub } from './ws/pubsub.js';
 
 // Plugins
 import rateLimitPlugin from './api/plugins/rateLimit.js';
@@ -42,6 +44,7 @@ async function start() {
     });
     await fastify.register(websocket);
     // await fastify.register(rateLimitPlugin); // Deshabilitado temporalmente
+    await fastify.register(authPlugin);
 
     // Register routes
     await fastify.register(healthRoutes);
@@ -59,6 +62,9 @@ async function start() {
     });
 
     logger.info(`🚀 Server listening on port ${config.PORT}`);
+
+    // Init Redis Pub/Sub for WebSocket fanout
+    await initWsPubSub();
 
     // Connect to AWS IoT Core
     await mqttClient.connect();

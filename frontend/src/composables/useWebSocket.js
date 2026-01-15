@@ -1,4 +1,5 @@
 import { ref, onUnmounted } from 'vue';
+import { getCurrentUser } from '../services/authService';
 
 const WS_URL = import.meta.env.VITE_WS_URL || 'ws://localhost:3002';
 
@@ -6,9 +7,18 @@ export function useWebSocket() {
   const ws = ref(null);
   const connected = ref(false);
 
-  function connect({ onConnectionChange = null, onMessage = null } = {}) {
+  async function connect({ onConnectionChange = null, onMessage = null, token = null } = {}) {
     try {
-      ws.value = new WebSocket(`${WS_URL}/ws`);
+      let wsToken = token;
+      if (!wsToken) {
+        const user = getCurrentUser();
+        if (user) {
+          wsToken = await user.getIdToken();
+        }
+      }
+
+      const query = wsToken ? `?token=${encodeURIComponent(wsToken)}` : '';
+      ws.value = new WebSocket(`${WS_URL}/ws${query}`);
 
       ws.value.onopen = () => {
         console.log('WebSocket connected');
@@ -40,7 +50,7 @@ export function useWebSocket() {
         // Attempt to reconnect after 5 seconds
         setTimeout(() => {
           console.log('Attempting to reconnect...');
-          connect({ onConnectionChange, onMessage });
+          connect({ onConnectionChange, onMessage, token: wsToken });
         }, 5000);
       };
     } catch (error) {

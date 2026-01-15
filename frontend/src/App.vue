@@ -1,104 +1,139 @@
 <template>
   <div id="app">
-    <header class="app-header">
-      <div class="header-container">
-        <div class="logo-section">
-          <img src="./assets/image.png" alt="Granix" class="logo" />
-        </div>
-        <div class="connection-status">
-          <div :class="['status-dot', wsConnected ? 'online' : 'offline']"></div>
-          <span class="status-text">{{ wsConnected ? 'Conectado' : 'Desconectado' }}</span>
-        </div>
-      </div>
-    </header>
+    <div v-if="!isAuthReady" class="auth-loading">
+      Verificando sesión...
+    </div>
 
-    <main class="app-main">
-      <!-- Product Info -->
-      <section class="product-section">
-        <div class="product-card">
-          <div class="product-label">Producto</div>
-          <div class="product-name">Aritos Frutales</div>
-        </div>
-      </section>
+    <!-- Login Screen -->
+    <Login v-else-if="!isAuthenticated" @login-success="handleLoginSuccess" />
 
-      <!-- Metrics Summary -->
-      <section class="summary-section">
-        <div class="summary-card">
-          <div class="summary-label">Última Actualización</div>
-          <div class="summary-value small">{{ lastEventTime }}</div>
-        </div>
-        <div class="summary-card">
-          <div class="summary-label">Dispositivos Activos</div>
-          <div class="summary-value">{{ activeMachines }}</div>
-        </div>
-        <div class="summary-card summary-card-green">
-          <div class="summary-label">Productos Realizados</div>
-          <div class="summary-value">{{ counterMetrics.find(m => m.id === 'Productos realizados')?.value || 0 }}</div>
-        </div>
-        <div class="summary-card summary-card-red">
-          <div class="summary-label">Productos Rechazados</div>
-          <div class="summary-value">{{ counterMetrics.find(m => m.id === 'Productos rechazados')?.value || 0 }}</div>
-        </div>
-      </section>
-
-      <!-- Measurements Dashboard -->
-      <section class="measurements-section">
-        <h2 class="section-title">Mediciones en Vivo</h2>
-        
-        <!-- Gauges -->
-        <div v-if="gaugeMetrics.length > 0" class="metrics-group">
-          <h3 class="group-title">Medidores</h3>
-          <div class="metrics-grid gauges-grid">
-            <GaugeChart 
-              v-for="metric in gaugeMetrics"
-              :key="metric.id"
-              :label="formatLabel(metric.id)"
-              :value="metric.value"
-              :max="metric.max || 100"
-              :unit="getGaugeUnit(metric.id)"
-            />
+    <!-- Main App (Protected) -->
+    <div v-else class="main-app">
+      <header class="app-header">
+        <div class="header-container">
+          <div class="logo-section">
+            <img src="./assets/image.png" alt="Granix" class="logo" />
+          </div>
+          <div class="header-actions">
+            <div class="connection-status">
+              <div :class="['status-dot', wsConnected ? 'online' : 'offline']"></div>
+              <span class="status-text">{{ wsConnected ? 'Conectado' : 'Desconectado' }}</span>
+            </div>
+            <button @click="handleLogout" class="logout-button">Cerrar Sesión</button>
           </div>
         </div>
+      </header>
 
-        <!-- Status Lights -->
-        <div v-if="statusMetrics.length > 0" class="metrics-group">
-          <h3 class="group-title">Estado</h3>
-          <div class="metrics-grid status-grid">
-            <StatusLight 
-              v-for="metric in statusMetrics"
-              :key="metric.id"
-              :label="formatLabel(metric.id)"
-              :value="metric.value"
-              :color="metric.color"
-            />
-          </div>
-        </div>
+      <main class="app-main">
+        <!-- Plantas Tab -->
+        <Plants
+          v-if="currentTab === 'plants'"
+          :plants="plants"
+          :selectedPlant="selectedPlant"
+          :loading="plantsLoading"
+          :error="plantsError"
+          @select="handleSelectPlant"
+        />
 
-      </section>
+        <!-- Máquinas Tab -->
+        <Machines
+          v-if="currentTab === 'machines'"
+          :machines="machines"
+          :selectedMachineId="selectedMachineId"
+          :selectedPlant="selectedPlant"
+          :loading="machinesLoading"
+          :error="machinesError"
+          @select="handleSelectMachine"
+        />
 
-    </main>
+        <!-- Mediciones Tab (Dashboard) -->
+        <Dashboard
+          v-if="currentTab === 'dashboard'"
+          :telemetryEvents="telemetryEvents"
+          :currentMetricsValues="currentMetricsValues"
+          :gaugeMetrics="gaugeMetrics"
+          :statusMetrics="statusMetrics"
+          :counterMetrics="counterMetrics"
+        />
+      </main>
+
+      <!-- Bottom Navigation -->
+      <nav class="bottom-nav">
+        <button
+          v-if="showPlantsTab"
+          class="nav-item"
+          :class="{ active: currentTab === 'plants' }"
+          @click="currentTab = 'plants'"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M3 21V8l7-5 7 5v13" />
+            <path d="M9 21V12h6v9" />
+          </svg>
+          <span>Plantas</span>
+        </button>
+        <button
+          class="nav-item"
+          :class="{ active: currentTab === 'machines' }"
+          @click="currentTab = 'machines'"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <rect x="2" y="3" width="20" height="14" rx="2" />
+            <line x1="8" y1="21" x2="16" y2="21" />
+            <line x1="12" y1="17" x2="12" y2="21" />
+          </svg>
+          <span>Máquinas</span>
+        </button>
+        <button
+          class="nav-item"
+          :class="{ active: currentTab === 'dashboard' }"
+          @click="currentTab = 'dashboard'"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M3 3v18h18" />
+            <path d="M18.7 8l-5.1 5.2-2.8-2.7L7 14.3" />
+          </svg>
+          <span>Mediciones</span>
+        </button>
+      </nav>
+    </div>
   </div>
 </template>
 
 <script>
-import { ref, onMounted, onUnmounted, computed } from 'vue';
+import { ref, onMounted, onUnmounted, computed, watch } from 'vue';
 import { useWebSocket } from './composables/useWebSocket';
-import GaugeChart from './components/GaugeChart.vue';
-import StatusLight from './components/StatusLight.vue';
-import NumericCounter from './components/NumericCounter.vue';
+import { onAuthChange, logout } from './services/authService';
+import api from './services/api';
+import Login from './views/Login.vue';
+import Machines from './views/Machines.vue';
+import Dashboard from './views/Dashboard.vue';
+import Plants from './views/Plants.vue';
 
 export default {
   name: 'App',
   components: {
-    GaugeChart,
-    StatusLight,
-    NumericCounter,
+    Login,
+    Machines,
+    Dashboard,
+    Plants,
   },
   setup() {
+    const isAuthenticated = ref(false);
+    const isAuthReady = ref(false);
+    const currentUser = ref(null);
+    const currentTab = ref('dashboard'); // Tab activo por defecto
     const telemetryEvents = ref([]);
     const currentMetricsValues = ref({});
     const wsConnected = ref(false);
     const showDataStream = ref(false);
+    const plants = ref([]);
+    const selectedPlant = ref(null);
+    const machines = ref([]);
+    const selectedMachineId = ref(null);
+    const plantsLoading = ref(false);
+    const plantsError = ref('');
+    const machinesLoading = ref(false);
+    const machinesError = ref('');
     const { connect, disconnect } = useWebSocket();
 
     // Mapping de IDs a tipos de métricas
@@ -119,17 +154,29 @@ export default {
       'Productos realizados': { type: 'counter', color: 'green' },
     };
 
-    // Inicializar todas las métricas con valores por defecto
-    Object.keys(metricMapping).forEach(key => {
-      const config = metricMapping[key];
-      if (config.type === 'gauge') {
-        currentMetricsValues.value[key] = { value: 0, quality: true, ts: Date.now() };
-      } else if (config.type === 'status') {
-        currentMetricsValues.value[key] = { value: false, quality: true, ts: Date.now() };
-      } else if (config.type === 'counter') {
-        currentMetricsValues.value[key] = { value: 0, quality: true, ts: Date.now() };
-      }
-    });
+    const showPlantsTab = computed(() => plants.value.length > 1);
+
+    function initializeMetricsValues() {
+      const nextValues = {};
+      Object.keys(metricMapping).forEach(key => {
+        const config = metricMapping[key];
+        if (config.type === 'gauge') {
+          nextValues[key] = { value: 0, quality: true, ts: Date.now() };
+        } else if (config.type === 'status') {
+          nextValues[key] = { value: false, quality: true, ts: Date.now() };
+        } else if (config.type === 'counter') {
+          nextValues[key] = { value: 0, quality: true, ts: Date.now() };
+        }
+      });
+      currentMetricsValues.value = nextValues;
+    }
+
+    function resetTelemetry() {
+      telemetryEvents.value = [];
+      initializeMetricsValues();
+    }
+
+    initializeMetricsValues();
 
     const lastEventTime = computed(() => {
       if (telemetryEvents.value.length === 0) return '-';
@@ -215,12 +262,20 @@ export default {
       return Object.keys(values).length;
     }
 
+    function matchesSelection(msg) {
+      if (!selectedPlant.value) return false;
+      if (msg.plant !== selectedPlant.value) return false;
+      if (selectedMachineId.value && msg.machineId !== selectedMachineId.value) return false;
+      return true;
+    }
+
     function handleNewMessage(msg) {
       if (msg.type === 'telemetry' || msg.type === 'status') {
+        if (!matchesSelection(msg)) return;
         // Agregar a stream de datos (solo últimos 100 para visualización)
         telemetryEvents.value.unshift({
-          id: `${msg.site}-${msg.machineId}-${msg.ts}`,
-          site: msg.site,
+          id: `${msg.plant || 'plant'}-${msg.machineId || 'machine'}-${msg.ts}`,
+          plant: msg.plant,
           machineId: msg.machineId,
           ts: msg.ts,
           values: msg.values,
@@ -250,35 +305,167 @@ export default {
       }
     }
 
+    // Observar cambios de autenticación
     onMounted(() => {
-      connect({
-        onConnectionChange: (connected) => {
-          wsConnected.value = connected;
-        },
-        onMessage: (msg) => {
-          handleNewMessage(msg);
-        },
+      const unsubscribe = onAuthChange((user) => {
+        isAuthReady.value = true;
+        if (user) {
+          isAuthenticated.value = true;
+          currentUser.value = user;
+          loadPlants();
+          
+          // Conectar WebSocket solo si está autenticado
+          connect({
+            onConnectionChange: (connected) => {
+              wsConnected.value = connected;
+            },
+            onMessage: (msg) => {
+              handleNewMessage(msg);
+            },
+          });
+        } else {
+          isAuthenticated.value = false;
+          currentUser.value = null;
+          plants.value = [];
+          selectedPlant.value = null;
+          machines.value = [];
+          selectedMachineId.value = null;
+          plantsError.value = '';
+          machinesError.value = '';
+          resetTelemetry();
+          disconnect();
+        }
       });
+
+      // Cleanup
+      return () => {
+        unsubscribe();
+      };
     });
 
     onUnmounted(() => {
       disconnect();
     });
 
+    const handleLoginSuccess = (user) => {
+      isAuthenticated.value = true;
+      currentUser.value = user;
+    };
+
+    const handleLogout = async () => {
+      const result = await logout();
+      if (result.success) {
+        isAuthenticated.value = false;
+        currentUser.value = null;
+        plants.value = [];
+        selectedPlant.value = null;
+        machines.value = [];
+        selectedMachineId.value = null;
+        plantsError.value = '';
+        machinesError.value = '';
+        resetTelemetry();
+        disconnect();
+      }
+    };
+
+    async function loadPlants() {
+      plantsLoading.value = true;
+      plantsError.value = '';
+      try {
+        const data = await api.getPlants();
+        plants.value = Array.isArray(data) ? data : [];
+        if (!selectedPlant.value || !plants.value.includes(selectedPlant.value)) {
+          selectedPlant.value = plants.value[0] || null;
+        }
+      } catch (error) {
+        console.error('Error al cargar plantas:', error);
+        plantsError.value = 'No se pudieron cargar las plantas.';
+        plants.value = [];
+        selectedPlant.value = null;
+      } finally {
+        plantsLoading.value = false;
+      }
+    }
+
+    async function loadMachines(plantId) {
+      if (!plantId) {
+        machines.value = [];
+        selectedMachineId.value = null;
+        return;
+      }
+      machinesLoading.value = true;
+      machinesError.value = '';
+      try {
+        const data = await api.getMachinesByPlant(plantId);
+        machines.value = Array.isArray(data) ? data : [];
+        const machineIds = machines.value.map(machine => machine.machineId);
+        if (!selectedMachineId.value || !machineIds.includes(selectedMachineId.value)) {
+          selectedMachineId.value = machineIds[0] || null;
+        }
+      } catch (error) {
+        console.error('Error al cargar máquinas:', error);
+        machinesError.value = 'No se pudieron cargar las máquinas.';
+        machines.value = [];
+        selectedMachineId.value = null;
+      } finally {
+        machinesLoading.value = false;
+      }
+    }
+
+    function handleSelectPlant(plant) {
+      if (plant !== selectedPlant.value) {
+        selectedPlant.value = plant;
+      }
+      if (currentTab.value === 'plants') {
+        currentTab.value = 'machines';
+      }
+    }
+
+    function handleSelectMachine(machineId) {
+      if (machineId !== selectedMachineId.value) {
+        selectedMachineId.value = machineId;
+      }
+    }
+
+    watch(selectedPlant, (plant) => {
+      loadMachines(plant);
+      resetTelemetry();
+    });
+
+    watch(selectedMachineId, () => {
+      resetTelemetry();
+    });
+
+    watch(showPlantsTab, (show) => {
+      if (!show && currentTab.value === 'plants') {
+        currentTab.value = 'dashboard';
+      }
+    });
+
     return {
+      isAuthenticated,
+      isAuthReady,
+      currentUser,
+      currentTab,
       telemetryEvents,
       currentMetricsValues,
       wsConnected,
-      lastEventTime,
-      activeMachines,
       gaugeMetrics,
       statusMetrics,
       counterMetrics,
-      showDataStream,
-      formatTime,
-      formatLabel,
-      getGaugeUnit,
-      countValues,
+      plants,
+      selectedPlant,
+      plantsLoading,
+      plantsError,
+      machines,
+      selectedMachineId,
+      machinesLoading,
+      machinesError,
+      showPlantsTab,
+      handleSelectPlant,
+      handleSelectMachine,
+      handleLoginSuccess,
+      handleLogout,
     };
   },
 };
@@ -304,12 +491,30 @@ html, body {
   flex-direction: column;
 }
 
+/* Main App Container */
+.main-app {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.auth-loading {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #888888;
+  font-size: 0.95rem;
+  letter-spacing: 0.2px;
+}
+
 /* Header */
 .app-header {
   background: linear-gradient(180deg, #0a0a0a 0%, #000000 100%);
   border-bottom: 1px solid #1a1a1a;
   padding: 1rem;
-  sticky: top;
+  position: sticky;
+  top: 0;
   z-index: 100;
   backdrop-filter: blur(10px);
 }
@@ -323,6 +528,30 @@ html, body {
   width: 100%;
 }
 
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.logout-button {
+  padding: 0.5rem 1rem;
+  background: rgba(239, 68, 68, 0.1);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  border-radius: 8px;
+  color: #ef4444;
+  font-size: 0.85rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.logout-button:hover {
+  background: rgba(239, 68, 68, 0.2);
+  border-color: rgba(239, 68, 68, 0.5);
+  box-shadow: 0 2px 8px rgba(239, 68, 68, 0.2);
+}
+
 .logo-section {
   display: flex;
   align-items: center;
@@ -330,7 +559,7 @@ html, body {
 }
 
 .logo {
-  width: 15rem;
+  width: 8rem;
   height: auto;
   opacity: 0.95;
 }
@@ -381,274 +610,98 @@ html, body {
 /* Main Content */
 .app-main {
   flex: 1;
-  max-width: 1600px;
   width: 100%;
-  margin: 0 auto;
-  padding: 1.5rem;
-  display: flex;
-  flex-direction: column;
-  gap: 2rem;
-}
-
-/* Product Section */
-.product-section {
-  display: flex;
-  justify-content: center;
-}
-
-.product-card {
-  background: linear-gradient(135deg, #0f0f0f 0%, #1a1a1a 100%);
-  border: 1px solid #222222;
-  border-radius: 8px;
-  padding: 1rem;
-  text-align: center;
-  transition: all 0.3s ease;
-  width: 100%;
-  max-width: none;
-}
-
-.product-card:hover {
-  border-color: #333333;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
-}
-
-.product-label {
-  font-size: 0.7rem;
-  color: rgba(255, 255, 255, 0.8);
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  margin-bottom: 0.25rem;
-  font-weight: 500;
-}
-
-.product-name {
-  font-size: 1.5rem;
-  font-weight: 700;
-  color: #ffffff;
-  letter-spacing: -0.3px;
-}
-
-/* Summary Section */
-.summary-section {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-  gap: 0.75rem;
-}
-
-.summary-card {
-  background: linear-gradient(135deg, #0f0f0f 0%, #1a1a1a 100%);
-  border: 1px solid #222222;
-  border-radius: 10px;
-  padding: 1rem;
-  text-align: center;
-  transition: all 0.3s ease;
-}
-
-.summary-card:hover {
-  border-color: #333333;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
-}
-
-.summary-card-green {
-  background: linear-gradient(135deg, #0f3b1a 0%, #0a2412 100%);
-  border-color: #10b981;
-}
-
-.summary-card-green:hover {
-  border-color: #059669;
-  box-shadow: 0 4px 12px rgba(16, 185, 129, 0.2);
-}
-
-.summary-card-green .summary-value {
-  color: #10b981;
-}
-
-.summary-card-red {
-  background: linear-gradient(135deg, #3b0f0f 0%, #2a0a0a 100%);
-  border-color: #ef4444;
-}
-
-.summary-card-red:hover {
-  border-color: #dc2626;
-  box-shadow: 0 4px 12px rgba(239, 68, 68, 0.2);
-}
-
-.summary-card-red .summary-value {
-  color: #ef4444;
-}
-
-.summary-label {
-  font-size: 0.75rem;
-  color: #666666;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  margin-bottom: 0.5rem;
-  font-weight: 500;
-}
-
-.summary-value {
-  font-size: 1.8rem;
-  font-weight: 700;
-  color: #ffffff;
-}
-
-.summary-value.small {
-  font-size: 1rem;
-  font-family: 'Monaco', 'Courier New', monospace;
-}
-
-/* Measurements Section */
-.measurements-section {
-  display: flex;
-  flex-direction: column;
-  gap: 1.5rem;
-}
-
-.section-title {
-  font-size: 1.1rem;
-  font-weight: 600;
-  color: #ffffff;
-  letter-spacing: -0.5px;
-  margin-bottom: 0.25rem;
-}
-
-.metrics-group {
-  display: flex;
-  flex-direction: column;
-  gap: 1rem;
-}
-
-.group-title {
-  font-size: 0.85rem;
-  color: #888888;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  font-weight: 500;
-}
-
-.metrics-grid {
-  display: grid;
-  gap: 1rem;
-}
-
-.gauges-grid {
-  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-}
-
-.status-grid {
-  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
-}
-
-.counters-grid {
-  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
-}
-
-/* Data Stream Section */
-.data-stream-section {
-  display: flex;
-  flex-direction: column;
-  gap: 1.5rem;
-  padding-top: 2rem;
-  border-top: 1px solid #1a1a1a;
-}
-
-.data-stream-container {
-  background: #0a0a0a;
-  border: 1px solid #1a1a1a;
-  border-radius: 10px;
-  max-height: 400px;
   overflow-y: auto;
 }
 
-.empty-state {
+/* Bottom Navigation */
+.bottom-nav {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: linear-gradient(180deg, #0a0a0a 0%, #000000 100%);
+  border-top: 1px solid #1a1a1a;
   display: flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 200px;
-  color: #666666;
-  font-size: 0.95rem;
+  justify-content: space-around;
+  padding: 0.75rem 0;
+  z-index: 1000;
+  backdrop-filter: blur(10px);
 }
 
-.stream-list {
+.nav-item {
   display: flex;
   flex-direction: column;
-}
-
-.stream-item {
-  display: flex;
-  gap: 1rem;
   align-items: center;
-  padding: 1rem;
-  border-bottom: 1px solid #1a1a1a;
-  font-size: 0.85rem;
-  transition: background 0.2s ease;
-}
-
-.stream-item:hover {
-  background: #111111;
-}
-
-.stream-item:last-child {
-  border-bottom: none;
-}
-
-.stream-time {
+  gap: 0.25rem;
+  padding: 0.5rem 1.5rem;
+  background: none;
+  border: none;
   color: #666666;
-  font-family: 'Monaco', 'Courier New', monospace;
-  min-width: 80px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  border-radius: 8px;
 }
 
-.stream-machine {
-  background: #1a1a1a;
-  color: #a0a0a0;
-  padding: 0.25rem 0.75rem;
-  border-radius: 4px;
-  min-width: 100px;
-  text-align: center;
+.nav-item svg {
+  width: 24px;
+  height: 24px;
+  transition: all 0.3s ease;
 }
 
-.stream-values {
-  color: #888888;
-  margin-left: auto;
+.nav-item span {
+  font-size: 0.75rem;
+  font-weight: 500;
+  transition: all 0.3s ease;
 }
 
-/* Scrollbar Styling */
-.data-stream-container::-webkit-scrollbar {
-  width: 8px;
+.nav-item:hover {
+  color: #8a2be2;
+  background: rgba(138, 43, 226, 0.1);
 }
 
-.data-stream-container::-webkit-scrollbar-track {
-  background: #0a0a0a;
+.nav-item.active {
+  color: #8a2be2;
+  background: rgba(138, 43, 226, 0.15);
 }
 
-.data-stream-container::-webkit-scrollbar-thumb {
-  background: #333333;
-  border-radius: 4px;
-}
-
-.data-stream-container::-webkit-scrollbar-thumb:hover {
-  background: #444444;
+.nav-item.active svg {
+  transform: scale(1.1);
 }
 
 /* Mobile Responsiveness */
 @media (max-width: 768px) {
-  .product-card {
-    padding: 0.75rem 1.5rem;
+  .header-actions {
+    flex-direction: row;
+    gap: 0.5rem;
   }
 
-  .product-name {
-    font-size: 1.2rem;
+  .logout-button {
+    padding: 0.4rem 0.75rem;
+    font-size: 0.75rem;
   }
 
-  .status-grid {
-    grid-template-columns: repeat(2, 1fr);
-    gap: 1rem;
+  .bottom-nav {
+    padding: 0.5rem 0;
+  }
+
+  .nav-item {
+    padding: 0.5rem 1rem;
+  }
+
+  .nav-item svg {
+    width: 22px;
+    height: 22px;
+  }
+
+  .nav-item span {
+    font-size: 0.7rem;
   }
 }
 
 @media (max-width: 480px) {
   .app-header {
-    padding: 1rem;
+    padding: 0.75rem 1rem;
   }
 
   .logo {
@@ -656,35 +709,21 @@ html, body {
     width: 10rem;
   }
 
-  .brand-name {
-    font-size: 1.1rem;
+  .connection-status {
+    padding: 0.4rem 0.75rem;
   }
 
-  .app-main {
-    padding: 0.75rem;
-    gap: 1.5rem;
+  .status-text {
+    display: none;
   }
 
-  .status-grid {
-    grid-template-columns: 1fr;
+  .logout-button {
+    padding: 0.4rem 0.6rem;
+    font-size: 0.7rem;
   }
 
-  .counters-grid {
-    grid-template-columns: repeat(2, 1fr);
-    gap: 0.75rem;
-  }
-
-  .summary-value {
-    font-size: 1.3rem;
-  }
-
-  .metric-card,
-  .numeric-counter {
-    padding: 0.75rem;
-  }
-
-  .metric-value {
-    font-size: 1.2rem;
+  .nav-item {
+    padding: 0.4rem 0.75rem;
   }
 }
 </style>

@@ -1,20 +1,40 @@
 import { FastifyPluginAsync } from 'fastify';
 import { prisma } from '../../db/prisma.js';
 import { acknowledgeAlarm } from '../../services/alarmService.js';
+import { allowedPlants, requireRole } from '../utils/authz.js';
 
 const alarmsRoutes: FastifyPluginAsync = async (fastify) => {
   // Get alarms for a specific machine
   fastify.get<{
-    Params: { site: string; machineId: string };
+    Params: { plant: string; machineId: string };
     Querystring: { acknowledged?: string };
-  }>('/alarms/:site/:machineId', async (request, reply) => {
-    const { site, machineId } = request.params;
+  }>('/alarms/:plant/:machineId', async (request, reply) => {
+    if (!requireRole(request, 'viewer')) {
+      return reply.code(403).send({ error: 'Forbidden' });
+    }
+
+    const { plant, machineId } = request.params;
     const { acknowledged } = request.query;
+    const tenantId = request.user!.tenantId;
+    const plants = allowedPlants(request);
+
+    if (!plants.includes('*') && !plants.includes(plant)) {
+      return reply.code(403).send({ error: 'Forbidden' });
+    }
 
     // Find machine
+    const plantRecord = await prisma.plant.findFirst({
+      where: { tenantId, plantId: plant },
+      select: { id: true },
+    });
+
+    if (!plantRecord) {
+      return reply.code(404).send({ error: 'Plant not found' });
+    }
+
     const machine = await prisma.machine.findUnique({
       where: {
-        site_machineId: { site, machineId },
+        tenantId_plantId_machineId: { tenantId, plantId: plantRecord.id, machineId },
       },
     });
 
@@ -24,6 +44,8 @@ const alarmsRoutes: FastifyPluginAsync = async (fastify) => {
 
     // Build where clause
     const where: any = {
+      tenantId,
+      plantId: plantRecord.id,
       machineId: machine.id,
     };
 
@@ -46,9 +68,18 @@ const alarmsRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.get<{
     Querystring: { acknowledged?: string; severity?: string; limit?: string };
   }>('/alarms', async (request, reply) => {
-    const { acknowledged, severity, limit = '100' } = request.query;
+    if (!requireRole(request, 'viewer')) {
+      return reply.code(403).send({ error: 'Forbidden' });
+    }
 
-    const where: any = {};
+    const { acknowledged, severity, limit = '100' } = request.query;
+    const tenantId = request.user!.tenantId;
+    const plants = allowedPlants(request);
+
+    const where: any = {
+      tenantId,
+      ...(plants.includes('*') ? {} : { plant: { plantId: { in: plants } } }),
+    };
 
     if (acknowledged !== undefined) {
       where.acknowledged = acknowledged === 'true';
@@ -67,9 +98,13 @@ const alarmsRoutes: FastifyPluginAsync = async (fastify) => {
       include: {
         machine: {
           select: {
-            site: true,
             machineId: true,
             name: true,
+              plant: {
+                select: {
+                  plantId: true,
+                },
+              },
           },
         },
       },
@@ -82,10 +117,14 @@ const alarmsRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.post<{
     Params: { id: string };
   }>('/alarms/:id/acknowledge', async (request, reply) => {
+    if (!requireRole(request, 'plant_operator')) {
+      return reply.code(403).send({ error: 'Forbidden' });
+    }
+
     const { id } = request.params;
 
     try {
-      await acknowledgeAlarm(id);
+      await acknowledgeAlarm(id, request.user!.tenantId);
       return reply.send({ success: true, message: 'Alarm acknowledged' });
     } catch (error) {
       return reply.code(400).send({ error: 'Failed to acknowledge alarm' });

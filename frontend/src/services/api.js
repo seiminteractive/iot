@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { getCurrentUser } from './authService';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3002';
 
@@ -8,6 +9,15 @@ const apiClient = axios.create({
   headers: {
     'Content-Type': 'application/json',
   },
+});
+
+apiClient.interceptors.request.use(async (config) => {
+  const user = getCurrentUser();
+  if (user) {
+    const token = await user.getIdToken();
+    config.headers.Authorization = `Bearer ${token}`;
+  }
+  return config;
 });
 
 const api = {
@@ -23,30 +33,30 @@ const api = {
     return response.data;
   },
 
-  async getMachinesBySite(site) {
-    const response = await apiClient.get(`/api/machines/${site}`);
+  async getMachinesByPlant(plant) {
+    const response = await apiClient.get(`/api/machines/${plant}`);
     return response.data;
   },
 
-  async getMachine(site, machineId) {
-    const response = await apiClient.get(`/api/machines/${site}/${machineId}`);
+  async getMachine(plant, machineId) {
+    const response = await apiClient.get(`/api/machines/${plant}/${machineId}`);
     return response.data;
   },
 
-  async getMachineState(site, machineId) {
-    const response = await apiClient.get(`/api/machines/${site}/${machineId}/state`);
+  async getMachineState(plant, machineId) {
+    const response = await apiClient.get(`/api/machines/${plant}/${machineId}/state`);
     return response.data;
   },
 
-  // Sites
-  async getSites() {
+  // Plants (legacy: /sites)
+  async getPlants() {
     const response = await apiClient.get('/api/sites');
     return response.data;
   },
 
   // Telemetry
-  async getTelemetry(site, machineId, params = {}) {
-    const response = await apiClient.get(`/api/telemetry/${site}/${machineId}`, { params });
+  async getTelemetry(plant, machineId, params = {}) {
+    const response = await apiClient.get(`/api/telemetry/${plant}/${machineId}`, { params });
     return response.data;
   },
 
@@ -61,8 +71,8 @@ const api = {
     return response.data;
   },
 
-  async getAlarmsForMachine(site, machineId, params = {}) {
-    const response = await apiClient.get(`/api/alarms/${site}/${machineId}`, { params });
+  async getAlarmsForMachine(plant, machineId, params = {}) {
+    const response = await apiClient.get(`/api/alarms/${plant}/${machineId}`, { params });
     return response.data;
   },
 

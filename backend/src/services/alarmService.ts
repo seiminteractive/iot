@@ -3,6 +3,8 @@ import { logger } from '../utils/logger.js';
 
 export interface AlarmData {
   machineId: string;
+  tenantId: string;
+  plantId: string;
   type: string;
   message: string;
   severity: 'low' | 'medium' | 'high' | 'critical';
@@ -13,9 +15,10 @@ export interface AlarmData {
  */
 export async function createAlarm(data: AlarmData): Promise<void> {
   try {
-    // Find machine by machineId (assuming it's the internal UUID)
     const alarm = await prisma.alarm.create({
       data: {
+        tenantId: data.tenantId,
+        plantId: data.plantId,
         machineId: data.machineId,
         ts: new Date(),
         type: data.type,
@@ -34,10 +37,10 @@ export async function createAlarm(data: AlarmData): Promise<void> {
 /**
  * Acknowledge an alarm
  */
-export async function acknowledgeAlarm(alarmId: string): Promise<void> {
+export async function acknowledgeAlarm(alarmId: string, tenantId: string): Promise<void> {
   try {
-    await prisma.alarm.update({
-      where: { id: alarmId },
+    await prisma.alarm.updateMany({
+      where: { id: alarmId, tenantId },
       data: { acknowledged: true },
     });
 

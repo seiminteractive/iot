@@ -11,6 +11,7 @@
     "prisma:generate": "prisma generate",
     "prisma:migrate:dev": "prisma migrate dev",
     "prisma:migrate:deploy": "prisma migrate deploy",
+    "prisma:seed": "tsx prisma/seed.ts",
     "prisma:studio": "prisma studio",
     "test": "vitest",
     "test:unit": "vitest run tests/unit",
@@ -25,7 +26,9 @@
     "@fastify/websocket": "^10.0.1",
     "@prisma/client": "5.22.0",
     "dotenv": "^16.4.5",
+    "firebase-admin": "^12.7.0",
     "fastify": "^4.28.1",
+    "ioredis": "^5.4.2",
     "mqtt": "^5.3.3",
     "pino": "^9.5.0",
     "pino-pretty": "^11.3.0",
@@ -41,5 +44,8 @@
     "tsx": "^4.19.2",
     "typescript": "^5.6.3",
     "vitest": "^2.1.4"
+  },
+  "prisma": {
+    "seed": "tsx prisma/seed.ts"
   }
 }

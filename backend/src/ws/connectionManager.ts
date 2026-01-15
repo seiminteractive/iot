@@ -6,8 +6,10 @@ import { config } from '../config/env.js';
 
 interface ClientConnection {
   ws: WebSocket;
-  site?: string;
+  tenant?: string;
+  plant?: string;
   machineId?: string;
+  thingName?: string;
   lastPing: number;
 }
 
@@ -15,16 +17,28 @@ class ConnectionManager {
   private clients: Map<string, ClientConnection> = new Map();
   private heartbeatInterval: NodeJS.Timeout | null = null;
 
-  addClient(clientId: string, ws: WebSocket, site?: string, machineId?: string): void {
+  addClient(
+    clientId: string,
+    ws: WebSocket,
+    tenant?: string,
+    plant?: string,
+    machineId?: string,
+    thingName?: string
+  ): void {
     this.clients.set(clientId, {
       ws,
-      site,
+      tenant,
+      plant,
       machineId,
+      thingName,
       lastPing: Date.now(),
     });
 
     metricsCollector.setWsConnections(this.clients.size);
-    logger.info({ clientId, site, machineId, total: this.clients.size }, 'WebSocket client connected');
+    logger.info(
+      { clientId, tenant, plant, machineId, thingName, total: this.clients.size },
+      'WebSocket client connected'
+    );
 
     // Start heartbeat if not already running
     if (!this.heartbeatInterval) {
@@ -84,10 +98,13 @@ class ConnectionManager {
     
     for (const [clientId, client] of this.clients.entries()) {
       // Check if client is interested in this message
-      const interestedInSite = !client.site || client.site === message.site || client.site === '*';
+      const interestedInTenant = !client.tenant || client.tenant === message.tenant || client.tenant === '*';
+      const interestedInPlant = !client.plant || client.plant === message.plant || client.plant === '*';
       const interestedInMachine = !client.machineId || client.machineId === message.machineId || client.machineId === '*';
-      
-      if (interestedInSite && interestedInMachine && client.ws.readyState === WebSocket.OPEN) {
+      const interestedInGateway = !client.thingName || client.thingName === message.thingName || client.thingName === '*';
+
+      if (interestedInTenant && interestedInPlant && interestedInMachine && interestedInGateway &&
+          client.ws.readyState === WebSocket.OPEN) {
         try {
           client.ws.send(payload);
         } catch (error) {
@@ -122,7 +139,3 @@ class ConnectionManager {
 const connectionManager = new ConnectionManager();
 
 export { connectionManager };
-
-export function broadcastToClients(message: WSMessage): void {
-  connectionManager.broadcastToFiltered(message);
-}
