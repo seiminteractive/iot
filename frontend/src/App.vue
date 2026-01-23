@@ -9,22 +9,38 @@
 
     <!-- Main App (Protected) -->
     <div v-else class="main-app">
-      <header class="app-header">
-        <div class="header-container">
-          <div class="logo-section">
-            <img src="./assets/image.png" alt="Granix" class="logo" />
-          </div>
-          <div class="header-actions">
-            <div class="connection-status">
-              <div :class="['status-dot', wsConnected ? 'online' : 'offline']"></div>
-              <span class="status-text">{{ wsConnected ? 'Conectado' : 'Desconectado' }}</span>
-            </div>
-            <button @click="handleLogout" class="logout-button">Cerrar Sesión</button>
-          </div>
-        </div>
-      </header>
+      <!-- Ruta dedicada: Editor de Dashboard (F5 no lo cierra) -->
+      <DashboardBuilder
+        v-if="isDashboardBuilderRoute && builderData.plc && builderData.dashboard?.id && !builderData.loading"
+        :plc="builderData.plc"
+        :tenant="builderData.tenant"
+        :plant="builderData.plant"
+        :dashboard="builderData.dashboard"
+        :widgets="builderData.widgets"
+        @close="closeDashboardBuilderRoute"
+        @saved="reloadDashboardBuilderRoute"
+      />
+      <div v-else-if="isDashboardBuilderRoute" class="auth-loading">
+        Cargando editor...
+      </div>
 
-      <main class="app-main">
+      <template v-else>
+        <header v-if="currentTab !== 'admin'" class="app-header">
+          <div class="header-container">
+            <div class="logo-section">
+              <img src="./assets/image.png" alt="Granix" class="logo" />
+            </div>
+            <div class="header-actions">
+              <div class="connection-status">
+                <div :class="['status-dot', wsConnected ? 'online' : 'offline']"></div>
+                <span class="status-text">{{ wsConnected ? 'Conectado' : 'Desconectado' }}</span>
+              </div>
+              <button @click="handleLogout" class="logout-button">Cerrar Sesión</button>
+            </div>
+          </div>
+        </header>
+
+        <main class="app-main">
         <!-- Plantas Tab -->
         <Plants
           v-if="currentTab === 'plants'"
@@ -35,30 +51,36 @@
           @select="handleSelectPlant"
         />
 
-        <!-- Máquinas Tab -->
-        <Machines
-          v-if="currentTab === 'machines'"
-          :machines="machines"
-          :selectedMachineId="selectedMachineId"
+        <!-- PLCs Tab -->
+        <Plcs
+          v-if="currentTab === 'plcs'"
+          :plcs="plcs"
+          :selectedPlcThingName="selectedPlcThingName"
           :selectedPlant="selectedPlant"
-          :loading="machinesLoading"
-          :error="machinesError"
-          @select="handleSelectMachine"
+          :loading="plcsLoading"
+          :error="plcsError"
+          @select="handleSelectPlc"
         />
 
         <!-- Mediciones Tab (Dashboard) -->
-        <Dashboard
+        <DynamicDashboard
           v-if="currentTab === 'dashboard'"
-          :telemetryEvents="telemetryEvents"
-          :currentMetricsValues="currentMetricsValues"
-          :gaugeMetrics="gaugeMetrics"
-          :statusMetrics="statusMetrics"
-          :counterMetrics="counterMetrics"
+          :dashboard="dashboardData?.dashboard"
+          :tenant="dashboardData?.tenant"
+          :plant="dashboardData?.plant"
+          :plc="dashboardData?.plc"
+          :widgets="dashboardData?.widgets || []"
+          :currentValues="currentMetricsValues"
+          :loading="dashboardLoading"
+          :error="dashboardError"
         />
-      </main>
 
-      <!-- Bottom Navigation -->
-      <nav class="bottom-nav">
+        <!-- Admin Tab -->
+        <AdminPanel v-if="currentTab === 'admin'" :tab="adminTab" />
+        </main>
+
+        <!-- Bottom Navigation (operador) -->
+        <nav v-if="showOperatorTabs && currentTab !== 'admin'" class="bottom-nav">
         <button
           v-if="showPlantsTab"
           class="nav-item"
@@ -72,18 +94,20 @@
           <span>Plantas</span>
         </button>
         <button
+          v-if="showOperatorTabs"
           class="nav-item"
-          :class="{ active: currentTab === 'machines' }"
-          @click="currentTab = 'machines'"
+          :class="{ active: currentTab === 'plcs' }"
+          @click="currentTab = 'plcs'"
         >
           <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <rect x="2" y="3" width="20" height="14" rx="2" />
             <line x1="8" y1="21" x2="16" y2="21" />
             <line x1="12" y1="17" x2="12" y2="21" />
           </svg>
-          <span>Máquinas</span>
+          <span>PLCs</span>
         </button>
         <button
+          v-if="showOperatorTabs"
           class="nav-item"
           :class="{ active: currentTab === 'dashboard' }"
           @click="currentTab = 'dashboard'"
@@ -94,81 +118,221 @@
           </svg>
           <span>Mediciones</span>
         </button>
-      </nav>
+        <button
+          v-if="showAdminTab"
+          class="nav-item"
+          :class="{ active: currentTab === 'admin' }"
+          @click="currentTab = 'admin'"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="3" />
+            <path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 0 1-4 0v-.1a1.7 1.7 0 0 0-1-1.5 1.7 1.7 0 0 0-1.9.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.9 1.7 1.7 0 0 0-1.5-1H3a2 2 0 0 1 0-4h.1a1.7 1.7 0 0 0 1.5-1 1.7 1.7 0 0 0-.3-1.9l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.9.3 1.7 1.7 0 0 0 1-1.5V3a2 2 0 0 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.9-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.9 1.7 1.7 0 0 0 1.5 1H21a2 2 0 0 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z" />
+          </svg>
+          <span>Admin</span>
+        </button>
+        </nav>
+
+        <!-- Bottom Navigation (admin mode) -->
+        <nav v-if="currentTab === 'admin'" class="admin-nav">
+        <button
+          v-if="!isAdminOnly"
+          class="admin-nav-item"
+          @click="currentTab = 'dashboard'"
+          type="button"
+        >
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M15 18l-6-6 6-6" />
+          </svg>
+          <span>Volver</span>
+        </button>
+
+        <button class="admin-nav-item" :class="{ active: adminTab === 'tenants' }" @click="adminTab = 'tenants'" type="button">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M3 21V8l7-5 7 5v13" />
+            <rect x="9" y="13" width="6" height="8" />
+          </svg>
+          <span>Tenants</span>
+        </button>
+
+        <button class="admin-nav-item" :class="{ active: adminTab === 'plants' }" @click="adminTab = 'plants'" type="button">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M2 20h20" />
+            <path d="M5 20V8l7-5 7 5v12" />
+            <rect x="9" y="12" width="6" height="8" />
+          </svg>
+          <span>Plantas</span>
+        </button>
+
+        <button class="admin-nav-item" :class="{ active: adminTab === 'plcs' }" @click="adminTab = 'plcs'" type="button">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <rect x="2" y="3" width="20" height="14" rx="2" />
+            <line x1="8" y1="21" x2="16" y2="21" />
+            <line x1="12" y1="17" x2="12" y2="21" />
+          </svg>
+          <span>PLCs</span>
+        </button>
+
+        <button class="admin-nav-item" :class="{ active: adminTab === 'users' }" @click="adminTab = 'users'" type="button">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
+            <circle cx="9" cy="7" r="4" />
+            <path d="M22 21v-2a4 4 0 0 0-3-3.87" />
+            <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+          </svg>
+          <span>Usuarios</span>
+        </button>
+
+        <button class="admin-nav-item" :class="{ active: adminTab === 'persist' }" @click="adminTab = 'persist'" type="button">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <ellipse cx="12" cy="5" rx="9" ry="3"/>
+            <path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/>
+            <path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/>
+          </svg>
+          <span>Persistencia</span>
+        </button>
+
+        <button class="admin-nav-item" :class="{ active: adminTab === 'dashboards' }" @click="adminTab = 'dashboards'" type="button">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <rect x="3" y="3" width="7" height="7" />
+            <rect x="14" y="3" width="7" height="7" />
+            <rect x="14" y="14" width="7" height="7" />
+            <rect x="3" y="14" width="7" height="7" />
+          </svg>
+          <span>Dashboards</span>
+        </button>
+
+        <button class="admin-nav-item" @click="handleLogout" type="button">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+            <path d="M16 17l5-5-5-5" />
+            <path d="M21 12H9" />
+          </svg>
+          <span>Salir</span>
+        </button>
+        </nav>
+      </template>
     </div>
   </div>
 </template>
 
 <script>
 import { ref, onMounted, onUnmounted, computed, watch } from 'vue';
+import { useRoute, useRouter } from 'vue-router';
 import { useWebSocket } from './composables/useWebSocket';
 import { onAuthChange, logout } from './services/authService';
 import api from './services/api';
 import Login from './views/Login.vue';
-import Machines from './views/Machines.vue';
-import Dashboard from './views/Dashboard.vue';
+import Plcs from './views/Plcs.vue';
+import DynamicDashboard from './views/DynamicDashboard.vue';
 import Plants from './views/Plants.vue';
+import AdminPanel from './views/AdminPanel.vue';
+import DashboardBuilder from './views/DashboardBuilder.vue';
 
 export default {
   name: 'App',
   components: {
     Login,
-    Machines,
-    Dashboard,
+    Plcs,
+    DynamicDashboard,
     Plants,
+    AdminPanel,
+    DashboardBuilder,
   },
   setup() {
+    const route = useRoute();
+    const router = useRouter();
     const isAuthenticated = ref(false);
     const isAuthReady = ref(false);
     const currentUser = ref(null);
     const currentTab = ref('dashboard'); // Tab activo por defecto
+    const adminTab = ref('tenants');
     const telemetryEvents = ref([]);
     const currentMetricsValues = ref({});
     const wsConnected = ref(false);
     const showDataStream = ref(false);
     const plants = ref([]);
     const selectedPlant = ref(null);
-    const machines = ref([]);
-    const selectedMachineId = ref(null);
+    const plcs = ref([]);
+    const selectedPlcThingName = ref(null);
+    const isAdmin = ref(false);
+    const isAdminOnly = ref(false); // Solo admin, sin acceso a plantas
+    const tenantInfo = ref(null);
+    const dashboardData = ref(null);
+    const dashboardLoading = ref(false);
+    const dashboardError = ref('');
     const plantsLoading = ref(false);
     const plantsError = ref('');
-    const machinesLoading = ref(false);
-    const machinesError = ref('');
+    const plcsLoading = ref(false);
+    const plcsError = ref('');
     const { connect, disconnect } = useWebSocket();
 
-    // Mapping de IDs a tipos de métricas
-    const metricMapping = {
-      // Gauges (medidores con aguja)
-      'Porcentaje_Lote_Completo': { type: 'gauge', max: 100 },
-      'Velocidad_Linea': { type: 'gauge', max: 100 },
-      'Eficiencia': { type: 'gauge', max: 100 },
-      
-      // Status Lights (indicadores de luz) - Orden específico
-      'En Produccion': { type: 'status', color: 'green' },
-      'Detenida': { type: 'status', color: 'red' },
-      'Falta Producto': { type: 'status', color: 'yellow' },
-      'En Mantenimiento': { type: 'status', color: 'blue' },
-      
-      // Numeric Counters (contadores numéricos)
-      'Productos rechazados': { type: 'counter', color: 'red' },
-      'Productos realizados': { type: 'counter', color: 'green' },
+    // ===== Dashboard Builder (ruta dedicada) =====
+    const builderData = ref({
+      plc: null,
+      tenant: null,
+      plant: null,
+      dashboard: { id: null, name: '', iconUrl: '', layoutVersion: 1 },
+      widgets: [],
+      loading: false,
+      error: '',
+    });
+
+    const isDashboardBuilderRoute = computed(() => route.name === 'dashboardBuilder');
+
+    const applyQueryTabs = () => {
+      const qTab = route.query?.tab;
+      const qAdminTab = route.query?.adminTab;
+      if (typeof qTab === 'string' && qTab) currentTab.value = qTab;
+      if (typeof qAdminTab === 'string' && qAdminTab) adminTab.value = qAdminTab;
     };
 
-    const showPlantsTab = computed(() => plants.value.length > 1);
+    const loadBuilderFromRoute = async () => {
+      if (!isDashboardBuilderRoute.value) return;
+      const plcId = route.params?.plcId;
+      if (!plcId) return;
+
+      builderData.value.loading = true;
+      builderData.value.error = '';
+      try {
+        const dashboard = await api.getDashboardByPlc(plcId);
+        builderData.value = {
+          plc: dashboard.plc || null,
+          tenant: dashboard.tenant || null,
+          plant: dashboard.plant || null,
+          dashboard: {
+            id: dashboard.id,
+            name: dashboard.name,
+            iconUrl: dashboard.iconUrl || '',
+            layoutVersion: dashboard.layoutVersion || 1,
+          },
+          widgets: dashboard.widgets || [],
+          loading: false,
+          error: '',
+        };
+      } catch (e) {
+        console.error('Error cargando dashboard builder:', e);
+        builderData.value.loading = false;
+        builderData.value.error = 'No se pudo cargar el dashboard para editar.';
+        builderData.value.widgets = [];
+      }
+    };
+
+    const closeDashboardBuilderRoute = () => {
+      const returnTab = (route.query?.returnTab || 'admin');
+      const returnAdminTab = (route.query?.returnAdminTab || 'dashboards');
+      router.push({ name: 'home', query: { tab: returnTab, adminTab: returnAdminTab } });
+    };
+
+    const reloadDashboardBuilderRoute = async () => {
+      await loadBuilderFromRoute();
+    };
+
+    const showPlantsTab = computed(() => !isAdminOnly.value && plants.value.length > 1);
+    const showAdminTab = computed(() => isAdmin.value);
+    const showOperatorTabs = computed(() => !isAdminOnly.value); // PLCs, Dashboard, etc.
 
     function initializeMetricsValues() {
-      const nextValues = {};
-      Object.keys(metricMapping).forEach(key => {
-        const config = metricMapping[key];
-        if (config.type === 'gauge') {
-          nextValues[key] = { value: 0, quality: true, ts: Date.now() };
-        } else if (config.type === 'status') {
-          nextValues[key] = { value: false, quality: true, ts: Date.now() };
-        } else if (config.type === 'counter') {
-          nextValues[key] = { value: 0, quality: true, ts: Date.now() };
-        }
-      });
-      currentMetricsValues.value = nextValues;
+      currentMetricsValues.value = {};
     }
 
     function resetTelemetry() {
@@ -184,53 +348,12 @@ export default {
       return formatTime(lastEvent.ts);
     });
 
-    const activeMachines = computed(() => {
-      const machines = new Set();
+    const activePlcs = computed(() => {
+      const plcsSet = new Set();
       telemetryEvents.value.forEach(event => {
-        machines.add(event.machineId);
+        plcsSet.add(event.plcThingName);
       });
-      return machines.size;
-    });
-
-    const currentMetrics = computed(() => {
-      // Retornar todas las métricas en orden fijo basado en metricMapping
-      const metrics = [];
-      
-      Object.entries(metricMapping).forEach(([key, config]) => {
-        const metricValue = currentMetricsValues.value[key];
-        if (metricValue !== undefined) {
-          metrics.push({
-            id: key,
-            value: metricValue.value,
-            quality: metricValue.quality,
-            ts: metricValue.ts,
-            config,
-          });
-        }
-      });
-
-      return metrics;
-    });
-
-    const gaugeMetrics = computed(() => {
-      return currentMetrics.value.filter(metric => metric.config.type === 'gauge').map(metric => ({
-        ...metric,
-        max: metric.config.max || 100,
-      }));
-    });
-
-    const statusMetrics = computed(() => {
-      return currentMetrics.value.filter(metric => metric.config.type === 'status').map(metric => ({
-        ...metric,
-        color: metric.config.color || 'yellow',
-      }));
-    });
-
-    const counterMetrics = computed(() => {
-      return currentMetrics.value.filter(metric => metric.config.type === 'counter').map(metric => ({
-        ...metric,
-        color: metric.config.color || 'green',
-      }));
+      return plcsSet.size;
     });
 
     function formatTime(timestamp) {
@@ -242,41 +365,21 @@ export default {
       });
     }
 
-    function formatLabel(id) {
-      // Extrae el último segmento del ID (nombre de la variable)
-      const parts = id.split('.');
-      return parts[parts.length - 1] || id;
-    }
-
-    function getGaugeUnit(id) {
-      if (id.includes('Porcentaje') || id.includes('Eficiencia')) {
-        return '%';
-      } else if (id.includes('Velocidad')) {
-        return 'mph';
-      }
-      return '';
-    }
-
-    function countValues(values) {
-      if (!values || typeof values !== 'object') return 0;
-      return Object.keys(values).length;
-    }
-
     function matchesSelection(msg) {
       if (!selectedPlant.value) return false;
       if (msg.plant !== selectedPlant.value) return false;
-      if (selectedMachineId.value && msg.machineId !== selectedMachineId.value) return false;
+      if (selectedPlcThingName.value && msg.plcThingName !== selectedPlcThingName.value) return false;
       return true;
     }
 
     function handleNewMessage(msg) {
-      if (msg.type === 'telemetry' || msg.type === 'status') {
+      if (msg.type === 'telemetry') {
         if (!matchesSelection(msg)) return;
         // Agregar a stream de datos (solo últimos 100 para visualización)
         telemetryEvents.value.unshift({
-          id: `${msg.plant || 'plant'}-${msg.machineId || 'machine'}-${msg.ts}`,
+          id: `${msg.plant || 'plant'}-${msg.plcThingName || 'plc'}-${msg.ts}`,
           plant: msg.plant,
-          machineId: msg.machineId,
+          plcThingName: msg.plcThingName,
           ts: msg.ts,
           values: msg.values,
         });
@@ -289,16 +392,11 @@ export default {
         if (msg.values && typeof msg.values === 'object') {
           Object.entries(msg.values).forEach(([key, value]) => {
             if (value && typeof value === 'object' && 'value' in value) {
-              // Buscar si este key coincide con alguna métrica conocida
-              Object.keys(metricMapping).forEach(metricKey => {
-                if (key.includes(metricKey)) {
-                  currentMetricsValues.value[metricKey] = {
-                    value: value.value,
-                    quality: value.quality,
-                    ts: msg.ts,
-                  };
-                }
-              });
+              currentMetricsValues.value[key] = {
+                value: value.value,
+                quality: value.quality,
+                ts: msg.ts,
+              };
             }
           });
         }
@@ -307,31 +405,50 @@ export default {
 
     // Observar cambios de autenticación
     onMounted(() => {
-      const unsubscribe = onAuthChange((user) => {
+      const unsubscribe = onAuthChange(async (user) => {
         isAuthReady.value = true;
         if (user) {
           isAuthenticated.value = true;
           currentUser.value = user;
-          loadPlants();
-          
-          // Conectar WebSocket solo si está autenticado
-          connect({
-            onConnectionChange: (connected) => {
-              wsConnected.value = connected;
-            },
-            onMessage: (msg) => {
-              handleNewMessage(msg);
-            },
-          });
+          await loadAdminAccess();
+          applyQueryTabs();
+
+          if (!isAdminOnly.value) {
+            await loadPlants();
+            await loadTenantInfo();
+            // Conectar WebSocket solo si es operador
+            connect({
+              onConnectionChange: (connected) => {
+                wsConnected.value = connected;
+              },
+              onMessage: (msg) => {
+                handleNewMessage(msg);
+              },
+            });
+          } else {
+            // Admin-only: no levantar plantas ni WS
+            wsConnected.value = false;
+            disconnect();
+            currentTab.value = 'admin';
+            adminTab.value = 'tenants';
+          }
+
+          // Si entramos por ruta del builder (o refrescamos), cargar data
+          await loadBuilderFromRoute();
         } else {
           isAuthenticated.value = false;
           currentUser.value = null;
           plants.value = [];
           selectedPlant.value = null;
-          machines.value = [];
-          selectedMachineId.value = null;
+          plcs.value = [];
+          selectedPlcThingName.value = null;
+          isAdmin.value = false;
+          isAdminOnly.value = false;
+          tenantInfo.value = null;
+          dashboardData.value = null;
+          dashboardError.value = '';
           plantsError.value = '';
-          machinesError.value = '';
+          plcsError.value = '';
           resetTelemetry();
           disconnect();
         }
@@ -347,6 +464,16 @@ export default {
       disconnect();
     });
 
+    // Si cambian params/ruta, recargar builder o aplicar query tabs (F5/entrada directa)
+    watch(
+      () => [route.name, route.params?.plcId, route.query?.tab, route.query?.adminTab],
+      async () => {
+        if (!isAuthenticated.value) return;
+        applyQueryTabs();
+        await loadBuilderFromRoute();
+      }
+    );
+
     const handleLoginSuccess = (user) => {
       isAuthenticated.value = true;
       currentUser.value = user;
@@ -359,10 +486,10 @@ export default {
         currentUser.value = null;
         plants.value = [];
         selectedPlant.value = null;
-        machines.value = [];
-        selectedMachineId.value = null;
+        plcs.value = [];
+        selectedPlcThingName.value = null;
         plantsError.value = '';
-        machinesError.value = '';
+        plcsError.value = '';
         resetTelemetry();
         disconnect();
       }
@@ -387,28 +514,73 @@ export default {
       }
     }
 
-    async function loadMachines(plantId) {
+    async function loadPlcs(plantId) {
       if (!plantId) {
-        machines.value = [];
-        selectedMachineId.value = null;
+        plcs.value = [];
+        selectedPlcThingName.value = null;
         return;
       }
-      machinesLoading.value = true;
-      machinesError.value = '';
+      plcsLoading.value = true;
+      plcsError.value = '';
       try {
-        const data = await api.getMachinesByPlant(plantId);
-        machines.value = Array.isArray(data) ? data : [];
-        const machineIds = machines.value.map(machine => machine.machineId);
-        if (!selectedMachineId.value || !machineIds.includes(selectedMachineId.value)) {
-          selectedMachineId.value = machineIds[0] || null;
+        const data = await api.getPlcsByPlant(plantId);
+        plcs.value = Array.isArray(data) ? data : [];
+        const plcThingNames = plcs.value.map(plc => plc.plcThingName);
+        if (!selectedPlcThingName.value || !plcThingNames.includes(selectedPlcThingName.value)) {
+          selectedPlcThingName.value = plcThingNames[0] || null;
         }
       } catch (error) {
-        console.error('Error al cargar máquinas:', error);
-        machinesError.value = 'No se pudieron cargar las máquinas.';
-        machines.value = [];
-        selectedMachineId.value = null;
+        console.error('Error al cargar PLCs:', error);
+        plcsError.value = 'No se pudieron cargar los PLCs.';
+        plcs.value = [];
+        selectedPlcThingName.value = null;
       } finally {
-        machinesLoading.value = false;
+        plcsLoading.value = false;
+      }
+    }
+
+    async function loadAdminAccess() {
+      try {
+        const result = await api.getAdminAccess();
+        isAdmin.value = !!result?.allowed;
+        isAdminOnly.value = !!result?.adminOnly;
+        // Si es adminOnly, ir directo al panel admin
+        if (isAdminOnly.value) {
+          currentTab.value = 'admin';
+          adminTab.value = 'tenants';
+        }
+      } catch (error) {
+        isAdmin.value = false;
+        isAdminOnly.value = false;
+      }
+    }
+
+    async function loadTenantInfo() {
+      try {
+        tenantInfo.value = await api.getTenantMe();
+      } catch (error) {
+        tenantInfo.value = null;
+      }
+    }
+
+    async function loadDashboard() {
+      if (!tenantInfo.value?.slug || !selectedPlant.value || !selectedPlcThingName.value) {
+        dashboardData.value = null;
+        return;
+      }
+      dashboardLoading.value = true;
+      dashboardError.value = '';
+      try {
+        dashboardData.value = await api.getPublicDashboard(
+          tenantInfo.value.slug,
+          selectedPlant.value,
+          selectedPlcThingName.value
+        );
+      } catch (error) {
+        dashboardData.value = null;
+        dashboardError.value = 'No se pudo cargar el dashboard.';
+      } finally {
+        dashboardLoading.value = false;
       }
     }
 
@@ -417,27 +589,39 @@ export default {
         selectedPlant.value = plant;
       }
       if (currentTab.value === 'plants') {
-        currentTab.value = 'machines';
+        currentTab.value = 'plcs';
       }
     }
 
-    function handleSelectMachine(machineId) {
-      if (machineId !== selectedMachineId.value) {
-        selectedMachineId.value = machineId;
+    function handleSelectPlc(plcThingName) {
+      if (plcThingName !== selectedPlcThingName.value) {
+        selectedPlcThingName.value = plcThingName;
       }
     }
 
     watch(selectedPlant, (plant) => {
-      loadMachines(plant);
+      loadPlcs(plant);
       resetTelemetry();
+      loadDashboard();
     });
 
-    watch(selectedMachineId, () => {
+    watch(selectedPlcThingName, () => {
       resetTelemetry();
+      loadDashboard();
+    });
+
+    watch(tenantInfo, () => {
+      loadDashboard();
     });
 
     watch(showPlantsTab, (show) => {
       if (!show && currentTab.value === 'plants') {
+        currentTab.value = 'dashboard';
+      }
+    });
+
+    watch(showAdminTab, (show) => {
+      if (!show && currentTab.value === 'admin') {
         currentTab.value = 'dashboard';
       }
     });
@@ -447,25 +631,36 @@ export default {
       isAuthReady,
       currentUser,
       currentTab,
+      adminTab,
       telemetryEvents,
       currentMetricsValues,
       wsConnected,
-      gaugeMetrics,
-      statusMetrics,
-      counterMetrics,
       plants,
       selectedPlant,
       plantsLoading,
       plantsError,
-      machines,
-      selectedMachineId,
-      machinesLoading,
-      machinesError,
+      plcs,
+      selectedPlcThingName,
+      plcsLoading,
+      plcsError,
+      isAdmin,
+      isAdminOnly,
+      tenantInfo,
+      dashboardData,
+      dashboardLoading,
+      dashboardError,
       showPlantsTab,
+      showAdminTab,
+      showOperatorTabs,
       handleSelectPlant,
-      handleSelectMachine,
+      handleSelectPlc,
       handleLoginSuccess,
       handleLogout,
+      // Builder route
+      builderData,
+      isDashboardBuilderRoute,
+      closeDashboardBuilderRoute,
+      reloadDashboardBuilderRoute,
     };
   },
 };
@@ -656,17 +851,75 @@ html, body {
 }
 
 .nav-item:hover {
-  color: #8a2be2;
-  background: rgba(138, 43, 226, 0.1);
+  color: #f5f5f7;
+  background: rgba(255, 255, 255, 0.05);
 }
 
 .nav-item.active {
-  color: #8a2be2;
-  background: rgba(138, 43, 226, 0.15);
+  color: #f5f5f7;
+  background: rgba(255, 255, 255, 0.1);
 }
 
 .nav-item.active svg {
-  transform: scale(1.1);
+  transform: scale(1.05);
+}
+
+/* Admin Navigation */
+.admin-nav {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 72px;
+  background: #0d0d0d;
+  border-top: 1px solid #1d1d1f;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0 1rem;
+  z-index: 1000;
+}
+
+.admin-nav-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+  height: 56px;
+  padding: 0 1rem;
+  background: transparent;
+  border: none;
+  border-radius: 10px;
+  color: #48484a;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.admin-nav-item svg {
+  flex-shrink: 0;
+  transition: all 0.2s ease;
+}
+
+.admin-nav-item span {
+  font-size: 0.7rem;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.admin-nav-item:hover {
+  color: #86868b;
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.admin-nav-item.active {
+  color: #f5f5f7;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.admin-nav-item.active svg {
+  transform: scale(1.05);
 }
 
 /* Mobile Responsiveness */
@@ -699,6 +952,21 @@ html, body {
   }
 }
 
+@media (max-width: 768px) {
+  .admin-nav {
+    gap: 0;
+    padding: 0 0.5rem;
+  }
+
+  .admin-nav-item {
+    padding: 0 0.6rem;
+  }
+
+  .admin-nav-item span {
+    font-size: 0.65rem;
+  }
+}
+
 @media (max-width: 480px) {
   .app-header {
     padding: 0.75rem 1rem;
@@ -724,6 +992,20 @@ html, body {
 
   .nav-item {
     padding: 0.4rem 0.75rem;
+  }
+
+  .admin-nav-item {
+    padding: 0 0.4rem;
+    height: 52px;
+  }
+
+  .admin-nav-item svg {
+    width: 18px;
+    height: 18px;
+  }
+
+  .admin-nav-item span {
+    font-size: 0.6rem;
   }
 }
 </style>

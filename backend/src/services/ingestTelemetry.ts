@@ -2,100 +2,86 @@ import { Prisma } from '@prisma/client';
 import { prisma } from '../db/prisma.js';
 import { logger } from '../utils/logger.js';
 import { parseTopic } from '../mqtt/parseTopic.js';
-import { GatewayStatusMessage, NormalizedMessage } from '../types/index.js';
+import { NormalizedTelemetryMessage } from '../types/index.js';
 import { broadcastToClients } from '../ws/broadcast.js';
+import { getPersistDecision, resolvePersistRule } from './persistRules.js';
+import { upsertTelemetryHourly } from './hourlyAggregation.js';
+
+interface MetricValue {
+  id: string;
+  v: any;
+  q?: boolean;
+  t: number;
+}
+
+interface ArrayPayload {
+  timestamp?: number;
+  values: MetricValue[];
+}
 
 /**
  * Normalize incoming message to standard format
+ * Expects payload format: { timestamp?: number, values: [{ id, v, q, t }, ...] }
  */
-function normalizeMessage(topic: string, rawPayload: any): NormalizedMessage {
+function normalizeTelemetryMessage(topic: string, rawPayload: any): NormalizedTelemetryMessage {
   const parsed = parseTopic(topic);
 
-  if (!parsed.tenant || !parsed.province || !parsed.plant || !parsed.machineId) {
+  if (!parsed.tenant || !parsed.province || !parsed.plant || !parsed.gatewayId || !parsed.plcThingName) {
     throw new Error('Invalid telemetry topic format');
   }
 
-  // Check if already normalized (schema field present)
-  if (rawPayload.schema && rawPayload.machineId && rawPayload.values && rawPayload.ts) {
-    return {
-      schema: rawPayload.schema,
-      tenant: parsed.tenant,
-      province: parsed.province,
-      plant: parsed.plant,
-      machineId: rawPayload.machineId,
-      ts: rawPayload.ts,
-      seq: typeof rawPayload.seq === 'number' ? rawPayload.seq : undefined,
-      values: rawPayload.values,
-      topic,
-      raw: rawPayload,
-    };
+  if (!rawPayload || typeof rawPayload !== 'object') {
+    throw new Error('Invalid telemetry payload');
   }
 
-  // Handle KepServer/OPC format: { timestamp, values: [{ id, v, q, t }] }
-  if (rawPayload.timestamp && Array.isArray(rawPayload.values)) {
-    const convertedValues: Record<string, any> = {};
+  // Expect array format: { values: [...] }
+  const payload = rawPayload as ArrayPayload;
+  
+  if (!payload.values || !Array.isArray(payload.values) || payload.values.length === 0) {
+    throw new Error('Telemetry payload missing values array');
+  }
 
-    for (const item of rawPayload.values) {
-      if (item.id && item.v !== undefined) {
-        // Convert OPC format to simple key-value
-        const key = item.id.split('.').pop() || item.id;
-        convertedValues[key] = {
-          value: item.v,
-          quality: item.q,
-          timestamp: item.t,
-        };
-      }
+  // Build values object from all metrics in array
+  const values: Record<string, { value: any; quality?: boolean }> = {};
+  let latestTimestamp = 0;
+
+  for (const metric of payload.values) {
+    if (!metric.id || !Object.prototype.hasOwnProperty.call(metric, 'v') || !metric.t) {
+      logger.warn({ metric }, 'Skipping invalid metric in array');
+      continue;
     }
 
-    return {
-      schema: 1,
-      tenant: parsed.tenant,
-      province: parsed.province,
-      plant: parsed.plant,
-      machineId: parsed.machineId,
-      ts: rawPayload.timestamp,
-      seq: typeof rawPayload.seq === 'number' ? rawPayload.seq : undefined,
-      values: convertedValues,
-      topic,
-      raw: rawPayload,
+    values[metric.id] = {
+      value: metric.v,
+      quality: metric.q,
     };
+
+    if (metric.t > latestTimestamp) {
+      latestTimestamp = metric.t;
+    }
   }
 
-  // Convert simple key-value format (fallback)
+  if (Object.keys(values).length === 0) {
+    throw new Error('No valid metrics in payload');
+  }
+
+  // Use payload timestamp or latest metric timestamp
+  const timestamp = payload.timestamp || latestTimestamp;
+
   return {
-    schema: 1,
     tenant: parsed.tenant,
     province: parsed.province,
     plant: parsed.plant,
-    machineId: parsed.machineId,
-    ts: Date.now(),
-    seq: typeof rawPayload.seq === 'number' ? rawPayload.seq : undefined,
-    values: rawPayload,
+    gatewayId: parsed.gatewayId,
+    plcThingName: parsed.plcThingName,
+    metricId: Object.keys(values)[0], // Primary metric for logging
+    timestamp,
+    value: null, // Multiple values, use 'values' instead
+    quality: true,
+    values,
     topic,
     raw: rawPayload,
-  };
-}
-
-function normalizeGatewayStatus(topic: string, rawPayload: any): GatewayStatusMessage {
-  const parsed = parseTopic(topic);
-
-  if (!parsed.tenant || !parsed.province || !parsed.plant || !parsed.thingName) {
-    throw new Error('Invalid gateway status topic format');
-  }
-
-  const timestamp = rawPayload.timestamp || Date.now();
-  const state = rawPayload.state === 'offline' ? 'offline' : 'online';
-
-  return {
-    tenant: parsed.tenant,
-    province: parsed.province,
-    plant: parsed.plant,
-    thingName: parsed.thingName,
-    ts: timestamp,
-    state,
-    version: rawPayload.gateway?.version,
-    uptimeSec: rawPayload.gateway?.uptimeSec,
-    raw: rawPayload,
+    metrics: payload.values, // Keep original array for individual processing
   };
 }
 
@@ -106,75 +92,14 @@ export async function ingestTelemetry(topic: string, rawPayload: any): Promise<v
   try {
     const parsed = parseTopic(topic);
 
-    if (parsed.type === 'gateway_status') {
-      const status = normalizeGatewayStatus(topic, rawPayload);
-
-      const tenant = await prisma.tenant.findUnique({
-        where: { slug: status.tenant },
-      });
-
-      if (!tenant) {
-        logger.warn({ topic, tenant: status.tenant }, 'Tenant not found for gateway status');
-        return;
-      }
-
-      const plant = await prisma.plant.findFirst({
-        where: {
-          tenantId: tenant.id,
-          plantId: status.plant,
-          province: status.province,
-        },
-      });
-
-      if (!plant) {
-        logger.warn({ topic, plant: status.plant }, 'Plant not found for gateway status');
-        return;
-      }
-
-      await prisma.gateway.upsert({
-        where: {
-          tenantId_thingName: {
-            tenantId: tenant.id,
-            thingName: status.thingName,
-          },
-        },
-        create: {
-          tenantId: tenant.id,
-          plantId: plant.id,
-          thingName: status.thingName,
-          state: status.state,
-          version: status.version,
-          uptimeSec: status.uptimeSec,
-          lastSeenAt: new Date(status.ts),
-        },
-        update: {
-          plantId: plant.id,
-          state: status.state,
-          version: status.version,
-          uptimeSec: status.uptimeSec,
-          lastSeenAt: new Date(status.ts),
-        },
-      });
-
-      await broadcastToClients({
-        type: 'gateway_status',
-        tenant: status.tenant,
-        plant: status.plant,
-        thingName: status.thingName,
-        ts: status.ts,
-      });
-
-      return;
-    }
-
     if (parsed.type !== 'telemetry') {
       logger.warn({ topic }, 'Unknown topic type, skipping');
       return;
     }
 
     // Normalize message
-    const normalized = normalizeMessage(topic, rawPayload);
-    logger.debug({ normalized }, 'Normalized message');
+    const normalized = normalizeTelemetryMessage(topic, rawPayload);
+    logger.debug({ metricsCount: Object.keys(normalized.values).length }, 'Normalized message');
 
     const tenant = await prisma.tenant.findUnique({
       where: { slug: normalized.tenant },
@@ -198,71 +123,161 @@ export async function ingestTelemetry(topic: string, rawPayload: any): Promise<v
       return;
     }
 
-    // Upsert machine
-    const machine = await prisma.machine.upsert({
+    // Ensure gateway exists for this telemetry
+    const gateway = await prisma.gateway.upsert({
       where: {
-        tenantId_plantId_machineId: {
+        tenantId_gatewayId: {
           tenantId: tenant.id,
-          plantId: plant.id,
-          machineId: normalized.machineId,
+          gatewayId: normalized.gatewayId,
         },
       },
       create: {
         tenantId: tenant.id,
         plantId: plant.id,
-        machineId: normalized.machineId,
-        name: normalized.machineId,
-      },
-      update: {},
-    });
-
-    const idempotencyKey = typeof normalized.seq === 'number'
-      ? `${normalized.tenant}|${normalized.province}|${normalized.plant}|${normalized.machineId}|${normalized.seq}`
-      : null;
-
-    // Insert telemetry event (idempotent when seq is present)
-    try {
-      await prisma.telemetryEvent.create({
-        data: {
-          tenantId: tenant.id,
-          plantId: plant.id,
-          machineId: machine.id,
-          ts: new Date(normalized.ts),
-          topic: normalized.topic,
-          seq: normalized.seq,
-          idempotencyKey,
-          valuesJson: normalized.values,
-          rawJson: normalized.raw,
-        },
-      });
-    } catch (error) {
-      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
-        logger.warn({ idempotencyKey }, 'Duplicate telemetry ignored');
-        return;
-      }
-      throw error;
-    }
-
-    // Update machine state
-    await prisma.machineState.upsert({
-      where: {
-        machineId: machine.id,
-      },
-      create: {
-        machineId: machine.id,
-        tenantId: tenant.id,
-        plantId: plant.id,
-        lastTs: new Date(normalized.ts),
-        lastValuesJson: normalized.values,
+        gatewayId: normalized.gatewayId,
+        state: 'online',
+        lastSeenAt: new Date(normalized.timestamp),
       },
       update: {
-        lastTs: new Date(normalized.ts),
-        lastValuesJson: normalized.values,
+        plantId: plant.id,
+        lastSeenAt: new Date(normalized.timestamp),
+      },
+    });
+
+    // Upsert PLC
+    const plc = await prisma.plc.upsert({
+      where: {
+        tenantId_plantId_plcThingName: {
+          tenantId: tenant.id,
+          plantId: plant.id,
+          plcThingName: normalized.plcThingName,
+        },
+      },
+      create: {
+        tenantId: tenant.id,
+        plantId: plant.id,
+        gatewayId: gateway.id,
+        plcThingName: normalized.plcThingName,
+        name: normalized.plcThingName,
+      },
+      update: {
+        gatewayId: gateway.id,
+      },
+    });
+
+    // Process each metric individually for persistence rules
+    const metrics = normalized.metrics || [];
+    for (const metric of metrics) {
+      const metricId = metric.id;
+      const metricTs = metric.t;
+      const metricValue = metric.v;
+
+      const rule = await resolvePersistRule(
+        tenant.id,
+        plant.id,
+        gateway.id,
+        plc.id,
+        metricId
+      );
+      const decision = getPersistDecision(rule);
+      const retentionCutoff = new Date(Date.now() - decision.retentionDays * 24 * 60 * 60 * 1000);
+
+      if (decision.storeRaw) {
+        // Insert telemetry event per metric
+        try {
+          await prisma.telemetryEvent.create({
+            data: {
+              tenantId: tenant.id,
+              plantId: plant.id,
+              gatewayId: gateway.id,
+              plcId: plc.id,
+              metricId,
+              ts: new Date(metricTs),
+              topic: normalized.topic,
+              valuesJson: { [metricId]: { value: metricValue, quality: metric.q } },
+              rawJson: { id: metric.id, v: metric.v, q: metric.q, t: metric.t },
+            },
+          });
+        } catch (error) {
+          if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+            logger.debug({ tenantId: tenant.id, plcId: plc.id, metricId }, 'Duplicate telemetry ignored');
+          } else {
+            throw error;
+          }
+        }
+
+        // Cleanup old events for this metric
+        await prisma.telemetryEvent.deleteMany({
+          where: {
+            tenantId: tenant.id,
+            plantId: plant.id,
+            gatewayId: gateway.id,
+            plcId: plc.id,
+            metricId,
+            ts: { lt: retentionCutoff },
+          },
+        });
+      }
+
+      if (decision.storeHourly) {
+        await upsertTelemetryHourly({
+          tenantId: tenant.id,
+          plantId: plant.id,
+          gatewayId: gateway.id,
+          plcId: plc.id,
+          metricId,
+          timestamp: metricTs,
+          value: metricValue,
+          aggregate: decision.aggregate,
+        });
+
+        await prisma.telemetryHourly.deleteMany({
+          where: {
+            tenantId: tenant.id,
+            plantId: plant.id,
+            gatewayId: gateway.id,
+            plcId: plc.id,
+            metricId,
+            hour: { lt: retentionCutoff },
+          },
+        });
+      }
+    }
+
+    // Update PLC state with ALL metrics (merge with existing)
+    const existingState = await prisma.plcState.findUnique({
+      where: { plcId: plc.id },
+    });
+
+    const mergedValues = {
+      ...(existingState?.lastValuesJson as Record<string, any> || {}),
+      ...normalized.values,
+    };
+
+    await prisma.plcState.upsert({
+      where: {
+        plcId: plc.id,
+      },
+      create: {
+        plcId: plc.id,
+        tenantId: tenant.id,
+        plantId: plant.id,
+        lastTs: new Date(normalized.timestamp),
+        lastValuesJson: mergedValues,
+      },
+      update: {
+        lastTs: new Date(normalized.timestamp),
+        lastValuesJson: mergedValues,
       },
     });
 
     logger.info(
-      { tenant: normalized.tenant, plant: normalized.plant, machineId: normalized.machineId },
+      { 
+        tenant: normalized.tenant, 
+        plant: normalized.plant, 
+        plcThingName: normalized.plcThingName,
+        metricsCount: metrics.length,
+      },
       'Telemetry ingested successfully'
     );
 
@@ -271,8 +286,9 @@ export async function ingestTelemetry(topic: string, rawPayload: any): Promise<v
       type: 'telemetry',
       tenant: normalized.tenant,
       plant: normalized.plant,
-      machineId: normalized.machineId,
-      ts: normalized.ts,
+      plcThingName: normalized.plcThingName,
+      gatewayId: normalized.gatewayId,
+      ts: normalized.timestamp,
       values: normalized.values,
     });
   } catch (error) {

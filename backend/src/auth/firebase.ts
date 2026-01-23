@@ -24,3 +24,8 @@ export async function verifyFirebaseToken(token: string) {
   const decoded = await firebaseApp.auth().verifyIdToken(token);
   return decoded;
 }
+
+export function getFirebaseAuth() {
+  const firebaseApp = getFirebaseApp();
+  return firebaseApp.auth();
+}

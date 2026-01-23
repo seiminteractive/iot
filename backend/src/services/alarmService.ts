@@ -2,7 +2,7 @@ import { prisma } from '../db/prisma.js';
 import { logger } from '../utils/logger.js';
 
 export interface AlarmData {
-  machineId: string;
+  plcId: string;
   tenantId: string;
   plantId: string;
   type: string;
@@ -11,7 +11,7 @@ export interface AlarmData {
 }
 
 /**
- * Create an alarm for a machine
+ * Create an alarm for a PLC
  */
 export async function createAlarm(data: AlarmData): Promise<void> {
   try {
@@ -19,7 +19,7 @@ export async function createAlarm(data: AlarmData): Promise<void> {
       data: {
         tenantId: data.tenantId,
         plantId: data.plantId,
-        machineId: data.machineId,
+        plcId: data.plcId,
         ts: new Date(),
         type: data.type,
         message: data.message,
@@ -52,12 +52,12 @@ export async function acknowledgeAlarm(alarmId: string, tenantId: string): Promi
 }
 
 /**
- * Get alarms for a machine
+ * Get alarms for a PLC
  */
-export async function getAlarms(machineId: string, acknowledged?: boolean) {
+export async function getAlarms(plcId: string, acknowledged?: boolean) {
   return prisma.alarm.findMany({
     where: {
-      machineId,
+      plcId,
       ...(acknowledged !== undefined && { acknowledged }),
     },
     orderBy: {

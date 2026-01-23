@@ -13,9 +13,13 @@ import rateLimitPlugin from './api/plugins/rateLimit.js';
 
 // Routes
 import healthRoutes from './api/routes/health.js';
-import machinesRoutes from './api/routes/machines.js';
+import plcsRoutes from './api/routes/plcs.js';
 import telemetryRoutes from './api/routes/telemetry.js';
 import alarmsRoutes from './api/routes/alarms.js';
+import persistRulesRoutes from './api/routes/persistRules.js';
+import adminRoutes from './api/routes/admin.js';
+import publicDashboardsRoutes from './api/routes/publicDashboards.js';
+import tenantsRoutes from './api/routes/tenants.js';
 
 // WebSocket
 import realtimePlugin from './ws/realtime.js';
@@ -48,9 +52,13 @@ async function start() {
 
     // Register routes
     await fastify.register(healthRoutes);
-    await fastify.register(machinesRoutes, { prefix: '/api' });
+    await fastify.register(plcsRoutes, { prefix: '/api' });
     await fastify.register(telemetryRoutes, { prefix: '/api' });
     await fastify.register(alarmsRoutes, { prefix: '/api' });
+    await fastify.register(persistRulesRoutes, { prefix: '/api' });
+    await fastify.register(adminRoutes, { prefix: '/api' });
+    await fastify.register(tenantsRoutes, { prefix: '/api' });
+    await fastify.register(publicDashboardsRoutes);
 
     // Register WebSocket
     await fastify.register(realtimePlugin);

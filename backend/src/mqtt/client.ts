@@ -46,12 +46,6 @@ class MQTTClient {
         connectTimeout: 30 * 1000,
         keepalive: config.MQTT_KEEP_ALIVE,
         clean: false, // persistent session
-        will: {
-          topic: 'factory/backend/status',
-          payload: JSON.stringify({ status: 'offline', ts: Date.now() }),
-          qos: 1,
-          retain: true,
-        },
       };
 
       this.client = mqtt.connect(options);
@@ -73,9 +67,6 @@ class MQTTClient {
 
       // Re-subscribe to topics after connection
       this.subscribeToTopics();
-
-      // Publish online status
-      this.publishStatus('online');
     });
 
     this.client.on('message', this.handleMessage.bind(this));
@@ -129,7 +120,7 @@ class MQTTClient {
     }
 
     // Subscribe to configured topics from .env
-    const topics = [config.MQTT_TOPICS_TELEMETRY, config.MQTT_TOPICS_STATUS];
+    const topics = [config.MQTT_TOPICS_TELEMETRY];
 
     for (const topic of topics) {
       this.client.subscribe(topic, { qos: 1 }, (error) => {
@@ -153,7 +144,7 @@ class MQTTClient {
       // Log TODOS los mensajes (para debuggear)
       logger.info({ topic, message }, '📨 MQTT Message Received');
 
-      // Procesar SIEMPRE (parseTopic/ingesta hacen fallback si el topic no es factory/...)
+      // Procesar solo topics válidos (parseTopic filtra lo que no sea telemetry)
       await ingestTelemetry(topic, message);
       metricsCollector.incrementProcessed();
       metricsCollector.updateLastMessage();
@@ -186,22 +177,12 @@ class MQTTClient {
     }
   }
 
-  private publishStatus(status: 'online' | 'offline'): void {
-    this.publish(
-      'factory/backend/status',
-      { status, ts: Date.now(), clientId: config.AWS_IOT_CLIENT_ID },
-      1
-    );
-  }
-
   async disconnect(): Promise<void> {
     if (!this.client) return;
 
     return new Promise<void>((resolve) => {
       try {
         logger.info('Disconnecting from AWS IoT Core...');
-
-        this.publishStatus('offline');
 
         this.client?.end(false, {}, () => {
           this.isConnected = false;

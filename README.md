@@ -156,8 +156,13 @@ AWS_IOT_ENDPOINT=tu-endpoint.iot.us-east-2.amazonaws.com
 AWS_IOT_CLIENT_ID=backend-subscriber-testingiot
 
 # MQTT Topics
-MQTT_TOPICS_TELEMETRY=factory/+/+/telemetry
-MQTT_TOPICS_STATUS=factory/+/+/status
+MQTT_TOPICS_TELEMETRY=factory/+/+/+/gateway/+/telemetry
+
+# Admin interno (acceso UI de reglas)
+ADMIN_EMAILS=admin@tuempresa.com
+
+# Persistencia por defecto
+PERSIST_DEFAULT_MODE=none
 
 # CORS
 CORS_ORIGIN=https://testingiot.seiminteractive.io
@@ -246,46 +251,85 @@ docker logs -f iot-telemetry-db
 
 ## 📡 Topics MQTT
 
-### Convención de Topics
+### Convención de Topics (FINAL)
 
 ```
-factory/{site}/{machineId}/telemetry
-factory/{site}/{machineId}/status
+factory/{tenant}/{province}/{plant}/gateway/{thingName}/telemetry
 ```
 
 Ejemplos:
-- `factory/home/plc-01/telemetry`
-- `factory/cordoba/machine-02/status`
+- `factory/granix/ba/planta-1/gateway/granix-ba-gw-01/telemetry`
 
-### Formato de Mensajes
+### Formato de Mensajes (FINAL)
 
-**Opción A: Simple (desde KepServer/PLCs):**
-
-```json
-{
-  "Temperature": 22.6,
-  "Pressure": 101.3,
-  "MotorOn": true
-}
-```
-
-**Opción B: Normalizado:**
+**Telemetría (evento por variable, payload plano):**
 
 ```json
 {
-  "schema": 1,
-  "machineId": "plc-01",
-  "site": "home",
-  "ts": 1700000000000,
-  "values": {
-    "temperature": 22.6,
-    "pressure": 101.3,
-    "motorOn": true
-  }
+  "schemaVersion": 1,
+  "timestamp": 1736359200000,
+  "type": "telemetry",
+  "tenant": "granix",
+  "province": "ba",
+  "plant": "planta-1",
+  "gatewayId": "granix-ba-gw-01",
+  "plcId": "plc-03",
+  "metricId": "temp_head",
+  "value": 83.2,
+  "dataType": "float",
+  "unit": "celsius",
+  "quality": "GOOD"
 }
 ```
 
-El backend acepta ambos formatos y los normaliza automáticamente.
+## 🧩 Persistencia por Reglas
+
+- La persistencia se define en `persist_rules` (backend).
+- El gateway **no** decide qué se guarda.
+- Modos: `raw`, `hourly`, `both`, `none`.
+- Agregados por hora en `telemetry_hourly`.
+
+### Acceso Admin (solo usuario interno)
+
+Endpoints:
+- `GET /api/admin/access`
+- `GET/POST/PUT/DELETE /api/persist-rules`
+
+## 🧱 How to create a dashboard for a PLC
+
+1. In the Admin panel, select the Tenant and Plant.
+2. Find the PLC in the list.
+3. Click **Create** to create an empty dashboard.
+4. Set the dashboard name and optional icon URL.
+5. Add widgets with `widget_key`, `type`, `label`, `metric_id`, and optional `unit`/`data_type`.
+6. Save widget order using **Guardar orden**.
+
+API equivalents:
+- `POST /api/admin/plcs/:plcId/dashboard`
+- `POST /api/admin/dashboards/:dashboardId/widgets`
+- `POST /api/admin/dashboards/:dashboardId/widgets/reorder`
+
+**Heartbeat (mismo topic):**
+
+```json
+{
+  "schemaVersion": 1,
+  "timestamp": 1736359200000,
+  "type": "heartbeat",
+  "tenant": "granix",
+  "province": "ba",
+  "plant": "planta-1",
+  "gatewayId": "granix-ba-gw-01",
+  "state": "online",
+  "version": "1.0.0",
+  "uptimeSec": 93212,
+  "internet": "ok",
+  "mqtt": "ok",
+  "plcLink": "ok",
+  "bufferMode": "disk",
+  "queuedMessages": 0
+}
+```
 
 ## 🔌 API REST
 
@@ -298,20 +342,20 @@ GET /health
 GET /metrics
 ```
 
-#### Machines
+#### PLCs
 
 ```bash
-GET /api/machines                    # Todas las máquinas
-GET /api/machines/:site              # Máquinas por site
-GET /api/machines/:site/:machineId   # Máquina específica
-GET /api/machines/:site/:machineId/state  # Estado actual
+GET /api/plcs                    # Todas las plcs
+GET /api/plcs/:site              # PLCs por site
+GET /api/plcs/:site/:plcId   # Máquina específica
+GET /api/plcs/:site/:plcId/state  # Estado actual
 GET /api/sites                       # Lista de sites
 ```
 
 #### Telemetry
 
 ```bash
-GET /api/telemetry/:site/:machineId?from=ISO&to=ISO&limit=1000
+GET /api/telemetry/:site/:plcId?from=ISO&to=ISO&limit=1000
 GET /api/telemetry/latest?limit=100
 ```
 
@@ -319,21 +363,21 @@ GET /api/telemetry/latest?limit=100
 
 ```bash
 GET /api/alarms?acknowledged=false&severity=high
-GET /api/alarms/:site/:machineId
+GET /api/alarms/:site/:plcId
 POST /api/alarms/:id/acknowledge
 ```
 
 ### Ejemplos de Uso
 
 ```bash
-# Obtener todas las máquinas
-curl https://testingiot.seiminteractive.io/api/machines
+# Obtener todas las plcs
+curl https://testingiot.seiminteractive.io/api/plcs
 
 # Obtener telemetría de una máquina
 curl "https://testingiot.seiminteractive.io/api/telemetry/home/plc-01?limit=100"
 
 # Obtener estado actual
-curl https://testingiot.seiminteractive.io/api/machines/home/plc-01/state
+curl https://testingiot.seiminteractive.io/api/plcs/home/plc-01/state
 ```
 
 ## 🔄 WebSocket
@@ -344,7 +388,7 @@ curl https://testingiot.seiminteractive.io/api/machines/home/plc-01/state
 const ws = new WebSocket('wss://testingiot.seiminteractive.io/ws');
 
 // Con filtros
-const ws = new WebSocket('wss://testingiot.seiminteractive.io/ws?site=home&machineId=plc-01');
+const ws = new WebSocket('wss://testingiot.seiminteractive.io/ws?site=home&plcId=plc-01');
 ```
 
 ### Mensajes Recibidos
@@ -353,7 +397,7 @@ const ws = new WebSocket('wss://testingiot.seiminteractive.io/ws?site=home&machi
 {
   "type": "telemetry",
   "site": "home",
-  "machineId": "plc-01",
+  "plcId": "plc-01",
   "ts": 1700000000000,
   "values": {
     "temperature": 22.6
@@ -366,11 +410,12 @@ const ws = new WebSocket('wss://testingiot.seiminteractive.io/ws?site=home&machi
 ### Schema
 
 ```sql
--- Máquinas registradas
-machines (
+-- PLCs registradas
+plcs (
   id UUID PRIMARY KEY,
-  site TEXT,
-  machine_id TEXT,
+  tenant_id UUID,
+  plant_id UUID,
+  plc_id TEXT,
   name TEXT,
   created_at TIMESTAMPTZ
 )
@@ -378,7 +423,11 @@ machines (
 -- Eventos de telemetría
 telemetry_events (
   id UUID PRIMARY KEY,
-  machine_id UUID REFERENCES machines(id),
+  tenant_id UUID,
+  plant_id UUID,
+  gateway_id UUID,
+  plc_id UUID REFERENCES plcs(id),
+  metric_id TEXT,
   ts TIMESTAMPTZ,
   topic TEXT,
   values_json JSONB,
@@ -386,9 +435,9 @@ telemetry_events (
   created_at TIMESTAMPTZ
 )
 
--- Estado actual de cada máquina
-machine_state (
-  machine_id UUID PRIMARY KEY REFERENCES machines(id),
+-- Estado actual de cada PLC
+plc_state (
+  plc_id UUID PRIMARY KEY REFERENCES plcs(id),
   last_ts TIMESTAMPTZ,
   last_values_json JSONB,
   updated_at TIMESTAMPTZ
@@ -397,7 +446,7 @@ machine_state (
 -- Alarmas
 alarms (
   id UUID PRIMARY KEY,
-  machine_id UUID REFERENCES machines(id),
+  plc_id UUID REFERENCES plcs(id),
   ts TIMESTAMPTZ,
   type TEXT,
   message TEXT,
@@ -413,16 +462,17 @@ alarms (
 # Conectar a PostgreSQL
 docker exec -it iot-telemetry-db psql -U iot_user -d iot_telemetry
 
-# Ver máquinas
-SELECT * FROM machines;
+# Ver plcs
+SELECT * FROM plcs;
 
 # Ver últimos eventos
 SELECT * FROM telemetry_events ORDER BY ts DESC LIMIT 10;
 
 # Ver estado actual
-SELECT m.site, m.machine_id, ms.last_values_json 
-FROM machines m 
-JOIN machine_state ms ON m.id = ms.machine_id;
+SELECT p.plant_id, plc.plc_id, ps.last_values_json 
+FROM plcs plc
+JOIN plants p ON p.id = plc.plant_id
+JOIN plc_state ps ON ps.plc_id = plc.id;
 ```
 
 ## 🔧 Comandos Útiles
@@ -594,12 +644,13 @@ mosquitto_pub \
   -h tu-endpoint.iot.us-east-2.amazonaws.com \
   -p 8883 \
   -q 1 \
-  -t factory/home/plc-test/telemetry \
-  -m '{"temperature": 25.5, "pressure": 101.3}'
+  -t factory/granix/ba/planta-1/gateway/granix-ba-gw-01/telemetry \
+  -m '{"schemaVersion":1,"timestamp":1736359200000,"type":"telemetry","tenant":"granix","province":"ba","plant":"planta-1","gatewayId":"granix-ba-gw-01","plcId":"plc-03","metricId":"temp_head","value":25.5,"dataType":"float","unit":"celsius","quality":"GOOD"}'
 ```
 
 ## 📚 Recursos
 
+- `MIGRATION.md` - Baseline migration strategy and production-safe notes
 - [AWS IoT Core Documentation](https://docs.aws.amazon.com/iot/)
 - [Fastify Documentation](https://www.fastify.io/)
 - [Prisma Documentation](https://www.prisma.io/docs)

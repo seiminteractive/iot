@@ -2,29 +2,33 @@ import { FastifyPluginAsync } from 'fastify';
 import { prisma } from '../../db/prisma.js';
 import { acknowledgeAlarm } from '../../services/alarmService.js';
 import { allowedPlants, requireRole } from '../utils/authz.js';
+import { getTenantContext } from '../utils/tenant.js';
 
 const alarmsRoutes: FastifyPluginAsync = async (fastify) => {
-  // Get alarms for a specific machine
+  // Get alarms for a specific PLC
   fastify.get<{
-    Params: { plant: string; machineId: string };
+    Params: { plant: string; plcThingName: string };
     Querystring: { acknowledged?: string };
-  }>('/alarms/:plant/:machineId', async (request, reply) => {
+  }>('/alarms/:plant/:plcThingName', async (request, reply) => {
     if (!requireRole(request, 'viewer')) {
       return reply.code(403).send({ error: 'Forbidden' });
     }
 
-    const { plant, machineId } = request.params;
+    const { plant, plcThingName } = request.params;
     const { acknowledged } = request.query;
-    const tenantId = request.user!.tenantId;
+    const tenant = await getTenantContext(request);
+    if (!tenant) {
+      return reply.code(403).send({ error: 'Invalid tenant' });
+    }
     const plants = allowedPlants(request);
 
     if (!plants.includes('*') && !plants.includes(plant)) {
       return reply.code(403).send({ error: 'Forbidden' });
     }
 
-    // Find machine
+    // Find PLC
     const plantRecord = await prisma.plant.findFirst({
-      where: { tenantId, plantId: plant },
+      where: { tenantId: tenant.id, plantId: plant },
       select: { id: true },
     });
 
@@ -32,21 +36,25 @@ const alarmsRoutes: FastifyPluginAsync = async (fastify) => {
       return reply.code(404).send({ error: 'Plant not found' });
     }
 
-    const machine = await prisma.machine.findUnique({
+    const plc = await prisma.plc.findUnique({
       where: {
-        tenantId_plantId_machineId: { tenantId, plantId: plantRecord.id, machineId },
+        tenantId_plantId_plcThingName: {
+          tenantId: tenant.id,
+          plantId: plantRecord.id,
+          plcThingName,
+        },
       },
     });
 
-    if (!machine) {
-      return reply.code(404).send({ error: 'Machine not found' });
+    if (!plc) {
+      return reply.code(404).send({ error: 'PLC not found' });
     }
 
     // Build where clause
     const where: any = {
-      tenantId,
+      tenantId: tenant.id,
       plantId: plantRecord.id,
-      machineId: machine.id,
+      plcId: plc.id,
     };
 
     if (acknowledged !== undefined) {
@@ -73,11 +81,14 @@ const alarmsRoutes: FastifyPluginAsync = async (fastify) => {
     }
 
     const { acknowledged, severity, limit = '100' } = request.query;
-    const tenantId = request.user!.tenantId;
+    const tenant = await getTenantContext(request);
+    if (!tenant) {
+      return reply.code(403).send({ error: 'Invalid tenant' });
+    }
     const plants = allowedPlants(request);
 
     const where: any = {
-      tenantId,
+      tenantId: tenant.id,
       ...(plants.includes('*') ? {} : { plant: { plantId: { in: plants } } }),
     };
 
@@ -96,9 +107,9 @@ const alarmsRoutes: FastifyPluginAsync = async (fastify) => {
       },
       take: parseInt(limit, 10),
       include: {
-        machine: {
+        plc: {
           select: {
-            machineId: true,
+            plcThingName: true,
             name: true,
               plant: {
                 select: {

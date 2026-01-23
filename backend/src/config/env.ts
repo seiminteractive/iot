@@ -26,8 +26,7 @@ const envSchema = z.object({
   AWS_IOT_CERT_PATH: z.string(),
   AWS_IOT_KEY_PATH: z.string(),
   AWS_IOT_CA_PATH: z.string(),
-  MQTT_TOPICS_TELEMETRY: z.string().default('factory/+/+/+/+/telemetry'),
-  MQTT_TOPICS_STATUS: z.string().default('ops/+/+/+/gateway/+/status'),
+  MQTT_TOPICS_TELEMETRY: z.string().default('factory/+/+/+/+/+/telemetry'),
   MQTT_QOS: z.string().transform(Number).default('1'),
   MQTT_KEEP_ALIVE: z.string().transform(Number).default('60'),
   MQTT_RECONNECT_PERIOD: z.string().transform(Number).default('5000'),
@@ -46,6 +45,10 @@ const envSchema = z.object({
   FIREBASE_PROJECT_ID: z.string(),
   FIREBASE_CLIENT_EMAIL: z.string(),
   FIREBASE_PRIVATE_KEY: z.string(),
+  ADMIN_EMAILS: z.string().default(''),
+
+  // Persistence
+  PERSIST_DEFAULT_MODE: z.enum(['raw', 'hourly', 'both', 'none']).default('none'),
 
   // Redis
   REDIS_URL: z.string().default('redis://localhost:6379'),

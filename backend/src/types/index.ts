@@ -2,43 +2,41 @@ export interface ParsedTopic {
   tenant?: string;
   province?: string;
   plant?: string;
-  machineId?: string;
-  thingName?: string;
-  type: 'telemetry' | 'gateway_status' | 'unknown';
+  gatewayId?: string;
+  plcThingName?: string;
+  type: 'telemetry' | 'unknown';
   raw: string;
 }
 
-export interface NormalizedMessage {
-  schema: number;
+export interface MetricValue {
+  id: string;
+  v: any;
+  q?: boolean;
+  t: number;
+}
+
+export interface NormalizedTelemetryMessage {
   tenant: string;
   province: string;
   plant: string;
-  machineId: string;
-  ts: number;
-  seq?: number;
+  gatewayId: string;
+  plcThingName: string;
+  metricId: string;
+  timestamp: number;
+  value: number | string | boolean | null;
+  quality?: boolean | number | string | null;
   values: Record<string, any>;
   topic: string;
   raw: Record<string, any>;
-}
-
-export interface GatewayStatusMessage {
-  tenant: string;
-  province: string;
-  plant: string;
-  thingName: string;
-  ts: number;
-  state: 'online' | 'offline';
-  version?: string;
-  uptimeSec?: number;
-  raw: Record<string, any>;
+  metrics?: MetricValue[];
 }
 
 export interface WSMessage {
-  type: 'telemetry' | 'gateway_status' | 'alarm' | 'ping';
+  type: 'telemetry' | 'alarm' | 'ping';
   tenant: string;
   plant: string;
-  machineId?: string;
-  thingName?: string;
+  plcThingName?: string;
+  gatewayId?: string;
   ts: number;
   values?: Record<string, any>;
   message?: string;

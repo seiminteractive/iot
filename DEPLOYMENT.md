@@ -102,16 +102,11 @@ cd iot-telemetry
       ],
       "Resource": "arn:aws:iot:us-east-2:*:topic/factory/*"
     },
-    {
-      "Effect": "Allow",
-      "Action": [
-        "iot:Publish"
-      ],
-      "Resource": "arn:aws:iot:us-east-2:*:topic/factory/backend/*"
-    }
   ]
 }
 ```
+
+Nota: el backend solo suscribe, no publica a topics MQTT.
 
 5. Click **Create**
 
@@ -220,8 +215,13 @@ AWS_IOT_ENDPOINT=a3rrbz0ypehoz3-ats.iot.us-east-2.amazonaws.com
 AWS_IOT_CLIENT_ID=backend-subscriber-testingiot
 
 # MQTT Topics (puedes dejar estos valores)
-MQTT_TOPICS_TELEMETRY=factory/+/+/telemetry
-MQTT_TOPICS_STATUS=factory/+/+/status
+MQTT_TOPICS_TELEMETRY=factory/+/+/+/gateway/+/telemetry
+
+# Admin interno (acceso UI de reglas)
+ADMIN_EMAILS=admin@tuempresa.com
+
+# Persistencia por defecto
+PERSIST_DEFAULT_MODE=none
 
 # CORS - Cambiar con tu dominio
 CORS_ORIGIN=https://testingiot.seiminteractive.io
@@ -377,7 +377,7 @@ https://testingiot.seiminteractive.io
 Deberías ver el dashboard con:
 - Header con indicador de conexión WebSocket
 - Cards con estadísticas
-- Sección de máquinas (vacía al inicio)
+- Sección de plcs (vacía al inicio)
 - Sección de telemetría en tiempo real
 
 ### 8.3 Verificar MQTT
@@ -388,8 +388,7 @@ docker logs -f iot-telemetry-api
 
 # Buscar línea similar a:
 # ✅ Connected to AWS IoT Core
-# 📥 Subscribed to: factory/+/+/telemetry
-# 📥 Subscribed to: factory/+/+/status
+# 📥 Subscribed to: factory/+/+/+/gateway/+/telemetry
 ```
 
 ## 🧪 Paso 9: Enviar Datos de Prueba
@@ -399,15 +398,25 @@ docker logs -f iot-telemetry-api
 1. Ve a AWS IoT Core Console
 2. **Test** → **MQTT test client**
 3. En **Publish to a topic**:
-   - Topic: `factory/home/plc-test/telemetry`
-   - Message:
-   ```json
-   {
-     "temperature": 25.5,
-     "pressure": 101.3,
-     "motorOn": true
-   }
-   ```
+  - Topic: `factory/granix/ba/planta-1/gateway/granix-ba-gw-01/telemetry`
+  - Message:
+  ```json
+  {
+    "schemaVersion": 1,
+    "timestamp": 1736359200000,
+    "type": "telemetry",
+    "tenant": "granix",
+    "province": "ba",
+    "plant": "planta-1",
+    "gatewayId": "granix-ba-gw-01",
+    "plcId": "plc-03",
+    "metricId": "temp_head",
+    "value": 25.5,
+    "dataType": "float",
+    "unit": "celsius",
+    "quality": "GOOD"
+  }
+  ```
 4. Click **Publish**
 
 ### Opción B: Con mosquitto_pub
@@ -425,8 +434,8 @@ mosquitto_pub \
   -h tu-endpoint.iot.us-east-2.amazonaws.com \
   -p 8883 \
   -q 1 \
-  -t factory/home/plc-test/telemetry \
-  -m '{"temperature": 25.5, "pressure": 101.3, "motorOn": true}'
+  -t factory/granix/ba/planta-1/gateway/granix-ba-gw-01/telemetry \
+  -m '{"schemaVersion":1,"timestamp":1736359200000,"type":"telemetry","tenant":"granix","province":"ba","plant":"planta-1","gatewayId":"granix-ba-gw-01","plcId":"plc-03","metricId":"temp_head","value":25.5,"dataType":"float","unit":"celsius","quality":"GOOD"}'
 ```
 
 ### Verificar que se recibió
@@ -442,7 +451,7 @@ docker logs iot-telemetry-api --tail 50
 docker exec -it iot-telemetry-db psql -U iot_user -d iot_telemetry
 
 # En psql:
-SELECT * FROM machines;
+SELECT * FROM plcs;
 SELECT * FROM telemetry_events ORDER BY ts DESC LIMIT 5;
 \q
 ```

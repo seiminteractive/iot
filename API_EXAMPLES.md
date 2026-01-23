@@ -63,14 +63,14 @@ curl https://testingiot.seiminteractive.io/metrics
 
 ---
 
-### Machines
+### PLCs
 
-#### GET /api/machines
+#### GET /api/plcs
 
-Lista todas las máquinas registradas.
+Lista todas las plcs registradas.
 
 ```bash
-curl https://testingiot.seiminteractive.io/api/machines
+curl https://testingiot.seiminteractive.io/api/plcs
 ```
 
 **Response 200:**
@@ -79,11 +79,11 @@ curl https://testingiot.seiminteractive.io/api/machines
   {
     "id": "550e8400-e29b-41d4-a716-446655440000",
     "site": "home",
-    "machineId": "plc-01",
+    "plcId": "plc-01",
     "name": "plc-01",
     "createdAt": "2025-01-07T10:00:00.000Z",
     "state": {
-      "machineId": "550e8400-e29b-41d4-a716-446655440000",
+      "plcId": "550e8400-e29b-41d4-a716-446655440000",
       "lastTs": "2025-01-07T15:25:00.000Z",
       "lastValuesJson": {
         "temperature": 22.6,
@@ -100,20 +100,20 @@ curl https://testingiot.seiminteractive.io/api/machines
 ]
 ```
 
-#### GET /api/machines/:site
+#### GET /api/plcs/:site
 
-Lista máquinas de un site específico.
+Lista plcs de un site específico.
 
 ```bash
-curl https://testingiot.seiminteractive.io/api/machines/home
+curl https://testingiot.seiminteractive.io/api/plcs/home
 ```
 
-#### GET /api/machines/:site/:machineId
+#### GET /api/plcs/:site/:plcId
 
 Obtiene una máquina específica.
 
 ```bash
-curl https://testingiot.seiminteractive.io/api/machines/home/plc-01
+curl https://testingiot.seiminteractive.io/api/plcs/home/plc-01
 ```
 
 **Response 200:**
@@ -121,11 +121,11 @@ curl https://testingiot.seiminteractive.io/api/machines/home/plc-01
 {
   "id": "550e8400-e29b-41d4-a716-446655440000",
   "site": "home",
-  "machineId": "plc-01",
+  "plcId": "plc-01",
   "name": "plc-01",
   "createdAt": "2025-01-07T10:00:00.000Z",
   "state": {
-    "machineId": "550e8400-e29b-41d4-a716-446655440000",
+    "plcId": "550e8400-e29b-41d4-a716-446655440000",
     "lastTs": "2025-01-07T15:25:00.000Z",
     "lastValuesJson": {
       "temperature": 22.6,
@@ -144,22 +144,22 @@ curl https://testingiot.seiminteractive.io/api/machines/home/plc-01
 **Response 404:**
 ```json
 {
-  "error": "Machine not found"
+  "error": "PLC not found"
 }
 ```
 
-#### GET /api/machines/:site/:machineId/state
+#### GET /api/plcs/:site/:plcId/state
 
 Obtiene el estado actual de una máquina.
 
 ```bash
-curl https://testingiot.seiminteractive.io/api/machines/home/plc-01/state
+curl https://testingiot.seiminteractive.io/api/plcs/home/plc-01/state
 ```
 
 **Response 200:**
 ```json
 {
-  "machineId": "550e8400-e29b-41d4-a716-446655440000",
+  "plcId": "550e8400-e29b-41d4-a716-446655440000",
   "lastTs": "2025-01-07T15:25:00.000Z",
   "lastValuesJson": {
     "temperature": 22.6,
@@ -191,7 +191,7 @@ curl https://testingiot.seiminteractive.io/api/sites
 
 ### Telemetry
 
-#### GET /api/telemetry/:site/:machineId
+#### GET /api/telemetry/:site/:plcId
 
 Obtiene histórico de telemetría de una máquina.
 
@@ -213,18 +213,31 @@ curl "https://testingiot.seiminteractive.io/api/telemetry/home/plc-01?from=2025-
 [
   {
     "id": "660e8400-e29b-41d4-a716-446655440001",
-    "machineId": "550e8400-e29b-41d4-a716-446655440000",
+    "plcId": "550e8400-e29b-41d4-a716-446655440000",
     "ts": "2025-01-07T15:25:00.000Z",
-    "topic": "factory/home/plc-01/telemetry",
+    "topic": "factory/granix/ba/planta-1/gateway/granix-ba-gw-01/telemetry",
     "valuesJson": {
-      "temperature": 22.6,
-      "pressure": 101.3,
-      "motorOn": true
+      "temp_head": {
+        "value": 22.6,
+        "dataType": "float",
+        "unit": "celsius",
+        "quality": "GOOD"
+      }
     },
     "rawJson": {
-      "Temperature": 22.6,
-      "Pressure": 101.3,
-      "MotorOn": true
+      "schemaVersion": 1,
+      "timestamp": 1736359200000,
+      "type": "telemetry",
+      "tenant": "granix",
+      "province": "ba",
+      "plant": "planta-1",
+      "gatewayId": "granix-ba-gw-01",
+      "plcId": "plc-01",
+      "metricId": "temp_head",
+      "value": 22.6,
+      "dataType": "float",
+      "unit": "celsius",
+      "quality": "GOOD"
     },
     "createdAt": "2025-01-07T15:25:00.100Z"
   }
@@ -233,7 +246,7 @@ curl "https://testingiot.seiminteractive.io/api/telemetry/home/plc-01?from=2025-
 
 #### GET /api/telemetry/latest
 
-Obtiene los últimos eventos de telemetría de todas las máquinas.
+Obtiene los últimos eventos de telemetría de todas las plcs.
 
 **Query Parameters:**
 - `limit` (opcional): Número máximo de resultados (default: 100)
@@ -242,24 +255,57 @@ Obtiene los últimos eventos de telemetría de todas las máquinas.
 curl "https://testingiot.seiminteractive.io/api/telemetry/latest?limit=50"
 ```
 
+#### GET /api/telemetry/hourly
+
+Obtiene agregados por hora.
+
+**Query Parameters:**
+- `plant` (opcional)
+- `gatewayId` (opcional)
+- `plcId` (opcional)
+- `metricId` (opcional)
+- `from` / `to` (ISO)
+- `limit` (opcional, default: 500)
+
+```bash
+curl "https://testingiot.seiminteractive.io/api/telemetry/hourly?plant=planta-1&metricId=temp_head&limit=100"
+```
+
 **Response 200:**
 ```json
 [
   {
     "id": "660e8400-e29b-41d4-a716-446655440001",
-    "machineId": "550e8400-e29b-41d4-a716-446655440000",
+    "plcId": "550e8400-e29b-41d4-a716-446655440000",
     "ts": "2025-01-07T15:25:00.000Z",
-    "topic": "factory/home/plc-01/telemetry",
+    "topic": "factory/granix/ba/planta-1/gateway/granix-ba-gw-01/telemetry",
     "valuesJson": {
-      "temperature": 22.6
+      "temp_head": {
+        "value": 22.6,
+        "dataType": "float",
+        "unit": "celsius",
+        "quality": "GOOD"
+      }
     },
     "rawJson": {
-      "Temperature": 22.6
+      "schemaVersion": 1,
+      "timestamp": 1736359200000,
+      "type": "telemetry",
+      "tenant": "granix",
+      "province": "ba",
+      "plant": "planta-1",
+      "gatewayId": "granix-ba-gw-01",
+      "plcId": "plc-01",
+      "metricId": "temp_head",
+      "value": 22.6,
+      "dataType": "float",
+      "unit": "celsius",
+      "quality": "GOOD"
     },
     "createdAt": "2025-01-07T15:25:00.100Z",
-    "machine": {
-      "site": "home",
-      "machineId": "plc-01",
+    "plc": {
+      "plantId": "home",
+      "plcId": "plc-01",
       "name": "plc-01"
     }
   }
@@ -298,25 +344,25 @@ curl "https://testingiot.seiminteractive.io/api/alarms?acknowledged=false&severi
 [
   {
     "id": "770e8400-e29b-41d4-a716-446655440002",
-    "machineId": "550e8400-e29b-41d4-a716-446655440000",
+    "plcId": "550e8400-e29b-41d4-a716-446655440000",
     "ts": "2025-01-07T15:20:00.000Z",
     "type": "temperature_high",
     "message": "Temperature above threshold (25°C)",
     "severity": "high",
     "acknowledged": false,
     "createdAt": "2025-01-07T15:20:00.100Z",
-    "machine": {
-      "site": "home",
-      "machineId": "plc-01",
+    "plc": {
+      "plantId": "home",
+      "plcId": "plc-01",
       "name": "plc-01"
     }
   }
 ]
 ```
 
-#### GET /api/alarms/:site/:machineId
+#### GET /api/alarms/:site/:plcId
 
-Lista alarmas de una máquina específica.
+Lista alarmas de un PLC específico.
 
 **Query Parameters:**
 - `acknowledged` (opcional): `true` o `false`
@@ -374,10 +420,10 @@ ws.onmessage = (event) => {
 const ws = new WebSocket('wss://testingiot.seiminteractive.io/ws?site=home');
 
 // Solo eventos de una máquina específica
-const ws = new WebSocket('wss://testingiot.seiminteractive.io/ws?site=home&machineId=plc-01');
+const ws = new WebSocket('wss://testingiot.seiminteractive.io/ws?site=home&plcId=plc-01');
 
 // Todos los eventos (wildcard)
-const ws = new WebSocket('wss://testingiot.seiminteractive.io/ws?site=*&machineId=*');
+const ws = new WebSocket('wss://testingiot.seiminteractive.io/ws?site=*&plcId=*');
 ```
 
 ### Mensajes Recibidos
@@ -395,28 +441,30 @@ const ws = new WebSocket('wss://testingiot.seiminteractive.io/ws?site=*&machineI
 ```json
 {
   "type": "telemetry",
-  "site": "home",
-  "machineId": "plc-01",
+  "tenant": "granix",
+  "plant": "planta-1",
+  "plcId": "plc-01",
+  "gatewayId": "granix-ba-gw-01",
   "ts": 1704639000000,
   "values": {
-    "temperature": 22.6,
-    "pressure": 101.3,
-    "motorOn": true
+    "temp_head": {
+      "value": 22.6,
+      "dataType": "float",
+      "unit": "celsius",
+      "quality": "GOOD"
+    }
   }
 }
 ```
 
-#### Evento de status
+#### Evento de heartbeat
 ```json
 {
-  "type": "status",
-  "site": "home",
-  "machineId": "plc-01",
-  "ts": 1704639000000,
-  "values": {
-    "online": true,
-    "uptime": 3600000
-  }
+  "type": "heartbeat",
+  "tenant": "granix",
+  "plant": "planta-1",
+  "gatewayId": "granix-ba-gw-01",
+  "ts": 1704639000000
 }
 ```
 
@@ -436,15 +484,15 @@ const ws = new WebSocket('wss://testingiot.seiminteractive.io/ws?site=*&machineI
 
 ```javascript
 // GET request
-async function getMachines() {
-  const response = await fetch('https://testingiot.seiminteractive.io/api/machines');
-  const machines = await response.json();
-  console.log(machines);
+async function getPlcs() {
+  const response = await fetch('https://testingiot.seiminteractive.io/api/plcs');
+  const plcs = await response.json();
+  console.log(plcs);
 }
 
 // GET con query params
-async function getTelemetry(site, machineId, limit = 100) {
-  const url = new URL(`https://testingiot.seiminteractive.io/api/telemetry/${site}/${machineId}`);
+async function getTelemetry(site, plcId, limit = 100) {
+  const url = new URL(`https://testingiot.seiminteractive.io/api/telemetry/${site}/${plcId}`);
   url.searchParams.append('limit', limit);
   
   const response = await fetch(url);
@@ -473,8 +521,8 @@ const api = axios.create({
   timeout: 10000,
 });
 
-// GET machines
-const machines = await api.get('/api/machines');
+// GET plcs
+const plcs = await api.get('/api/plcs');
 
 // GET telemetry with params
 const telemetry = await api.get('/api/telemetry/home/plc-01', {
@@ -491,6 +539,85 @@ await api.post('/api/alarms/alarm-id/acknowledge');
 
 ---
 
+## 🧩 Persistencia (Admin)
+
+### GET /api/admin/access
+
+```bash
+curl https://testingiot.seiminteractive.io/api/admin/access
+```
+
+### GET /api/persist-rules
+
+```bash
+curl https://testingiot.seiminteractive.io/api/persist-rules
+```
+
+### POST /api/persist-rules
+
+```json
+{
+  "plantId": "planta-1",
+  "gatewayId": "granix-ba-gw-01",
+  "plcId": "plc-03",
+  "metricId": "temp_head",
+  "mode": "hourly",
+  "aggregate": "avg"
+}
+```
+
+---
+
+## 🧱 Dashboards (Admin)
+
+### GET /api/admin/tenants/:tenantId/plants/:plantId/plcs
+
+```bash
+curl https://testingiot.seiminteractive.io/api/admin/tenants/<tenantId>/plants/<plantId>/plcs
+```
+
+### GET /api/admin/plcs/:plcId/dashboard
+
+```bash
+curl https://testingiot.seiminteractive.io/api/admin/plcs/<plcId>/dashboard
+```
+
+### POST /api/admin/plcs/:plcId/dashboard
+
+```json
+{
+  "name": "Linea 1 - PLC 03",
+  "iconUrl": "https://firebasestorage.googleapis.com/..."
+}
+```
+
+### POST /api/admin/dashboards/:dashboardId/widgets
+
+```json
+{
+  "widgetKey": "temp_head",
+  "type": "gauge",
+  "label": "Temp Cabezal",
+  "metricId": "temp_head",
+  "unit": "celsius",
+  "dataType": "float",
+  "configJson": { "max": 120 },
+  "layoutJson": { "row": 1, "col": 1, "width": 1, "height": 1 },
+  "sortOrder": 0,
+  "isVisible": true
+}
+```
+
+---
+
+## 🌐 Dashboard público (read-only)
+
+```
+GET /tenants/:tenantSlug/plants/:plantId/plcs/:plcId/dashboard
+```
+
+---
+
 ## 🧪 Testing con curl
 
 ### Health check
@@ -501,7 +628,7 @@ curl -i https://testingiot.seiminteractive.io/health
 ### GET con headers
 ```bash
 curl -H "Accept: application/json" \
-     https://testingiot.seiminteractive.io/api/machines
+     https://testingiot.seiminteractive.io/api/plcs
 ```
 
 ### GET con query params
@@ -522,7 +649,7 @@ curl -X POST \
 
 ### Pretty print JSON
 ```bash
-curl -s https://testingiot.seiminteractive.io/api/machines | jq '.'
+curl -s https://testingiot.seiminteractive.io/api/plcs | jq '.'
 ```
 
 ---

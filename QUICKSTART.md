@@ -106,14 +106,24 @@ curl https://testingiot.seiminteractive.io/health
 
 Desde AWS IoT Console → Test → MQTT test client:
 
-**Topic:** `factory/home/plc-test/telemetry`
+**Topic:** `factory/granix/ba/planta-1/gateway/granix-ba-gw-01/telemetry`
 
 **Message:**
 ```json
 {
-  "temperature": 25.5,
-  "pressure": 101.3,
-  "motorOn": true
+  "schemaVersion": 1,
+  "timestamp": 1736359200000,
+  "type": "telemetry",
+  "tenant": "granix",
+  "province": "ba",
+  "plant": "planta-1",
+  "gatewayId": "granix-ba-gw-01",
+  "plcId": "plc-03",
+  "metricId": "temp_head",
+  "value": 25.5,
+  "dataType": "float",
+  "unit": "celsius",
+  "quality": "GOOD"
 }
 ```
 

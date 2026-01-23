@@ -11,18 +11,37 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+enum PersistMode {
+  raw
+  hourly
+  both
+  none
+}
+
+enum PersistAggregate {
+  sum
+  avg
+  min
+  max
+  last
+}
+
 model Tenant {
   id        String   @id @default(uuid()) @db.Uuid
   slug      String   @unique
   name      String
+  iconUrl   String?  @map("icon_url")
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
 
   plants          Plant[]
   gateways        Gateway[]
-  machines        Machine[]
+  plcs            Plc[]
   telemetryEvents TelemetryEvent[]
-  machineStates   MachineState[]
+  plcStates       PlcState[]
   alarms          Alarm[]
+  persistRules    PersistRule[]
+  telemetryHourly TelemetryHourly[]
+  plcDashboards   PlcDashboard[]
 
   @@map("tenants")
 }
@@ -36,13 +55,16 @@ model Plant {
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
 
   tenant          Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  machines        Machine[]
+  plcs            Plc[]
   gateways        Gateway[]
   telemetryEvents TelemetryEvent[]
-  machineStates   MachineState[]
+  telemetryHourly TelemetryHourly[]
+  plcStates       PlcState[]
   alarms          Alarm[]
+  plcDashboards   PlcDashboard[]
+  persistRules    PersistRule[]
 
-  @@unique([tenantId, plantId])
+  @@unique([tenantId, province, plantId])
   @@index([tenantId, province])
   @@map("plants")
 }
@@ -51,7 +73,7 @@ model Gateway {
   id         String   @id @default(uuid()) @db.Uuid
   tenantId   String   @map("tenant_id") @db.Uuid
   plantId    String   @map("plant_id") @db.Uuid
-  thingName  String   @map("thing_name")
+  gatewayId  String   @map("gateway_id")
   state      String   @default("offline")
   version    String?
   uptimeSec  Int?     @map("uptime_sec")
@@ -61,75 +83,137 @@ model Gateway {
 
   tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   plant  Plant  @relation(fields: [plantId], references: [id], onDelete: Cascade)
+  plcs            Plc[]
+  persistRules    PersistRule[]
+  telemetryEvents TelemetryEvent[]
+  telemetryHourly TelemetryHourly[]
 
-  @@unique([tenantId, thingName])
+  @@unique([tenantId, gatewayId])
   @@index([tenantId, plantId])
   @@map("gateways")
 }
 
-model Machine {
+model Plc {
   id         String   @id @default(uuid()) @db.Uuid
   tenantId   String   @map("tenant_id") @db.Uuid
   plantId    String   @map("plant_id") @db.Uuid
-  machineId  String   @map("machine_id")
+  gatewayId  String   @map("gateway_id") @db.Uuid
+  plcThingName String @map("plc_thing_name")
   name       String?
   createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz
 
   tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   plant  Plant  @relation(fields: [plantId], references: [id], onDelete: Cascade)
+  gateway Gateway @relation(fields: [gatewayId], references: [id], onDelete: Cascade)
 
   telemetryEvents TelemetryEvent[]
-  state           MachineState?
+  telemetryHourly TelemetryHourly[]
+  state           PlcState?
   alarms          Alarm[]
+  dashboards      PlcDashboard[]
+  persistRules    PersistRule[]
 
-  @@unique([tenantId, plantId, machineId])
+  @@unique([tenantId, plantId, plcThingName])
   @@index([tenantId, plantId])
-  @@map("machines")
+  @@index([tenantId, plantId, gatewayId])
+  @@map("plcs")
 }
 
 model TelemetryEvent {
   id             String   @id @default(uuid()) @db.Uuid
   tenantId       String   @map("tenant_id") @db.Uuid
   plantId        String   @map("plant_id") @db.Uuid
-  machineId      String   @map("machine_id") @db.Uuid
+  gatewayId      String   @map("gateway_id") @db.Uuid
+  plcId          String   @map("plc_id") @db.Uuid
+  metricId       String   @map("metric_id")
   ts             DateTime @db.Timestamptz
   topic          String
-  seq            Int?
-  idempotencyKey String?  @unique @map("idempotency_key")
   valuesJson     Json     @map("values_json") @db.JsonB
   rawJson        Json     @map("raw_json") @db.JsonB
   createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz
 
-  machine Machine @relation(fields: [machineId], references: [id], onDelete: Cascade)
-  tenant  Tenant  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  plant   Plant   @relation(fields: [plantId], references: [id], onDelete: Cascade)
+  plc     Plc    @relation(fields: [plcId], references: [id], onDelete: Cascade)
+  tenant  Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  plant   Plant  @relation(fields: [plantId], references: [id], onDelete: Cascade)
+  gateway Gateway @relation(fields: [gatewayId], references: [id], onDelete: Cascade)
 
   @@index([tenantId, plantId, ts(sort: Desc)])
-  @@index([machineId, ts(sort: Desc)])
+  @@index([plcId, ts(sort: Desc)])
+  @@unique([tenantId, plantId, gatewayId, plcId, metricId, ts])
   @@map("telemetry_events")
 }
 
-model MachineState {
-  machineId      String   @id @map("machine_id") @db.Uuid
+model PersistRule {
+  id         String   @id @default(uuid()) @db.Uuid
+  tenantId   String   @map("tenant_id") @db.Uuid
+  plantId    String?  @map("plant_id") @db.Uuid
+  gatewayId  String?  @map("gateway_id") @db.Uuid
+  plcId      String?  @map("plc_id") @db.Uuid
+  metricId   String   @map("metric_id")
+  mode       PersistMode
+  aggregate  PersistAggregate?
+  retentionDays Int  @map("retention_days") @default(7)
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt  DateTime @updatedAt @map("updated_at") @db.Timestamptz
+
+  tenant  Tenant  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  plant   Plant?  @relation(fields: [plantId], references: [id], onDelete: Cascade)
+  gateway Gateway? @relation(fields: [gatewayId], references: [id], onDelete: Cascade)
+  plc     Plc?    @relation(fields: [plcId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, metricId])
+  @@index([tenantId, plantId, plcId, metricId])
+  @@map("persist_rules")
+}
+
+model TelemetryHourly {
+  id            String   @id @default(uuid()) @db.Uuid
+  tenantId      String   @map("tenant_id") @db.Uuid
+  plantId       String   @map("plant_id") @db.Uuid
+  gatewayId     String   @map("gateway_id") @db.Uuid
+  plcId         String   @map("plc_id") @db.Uuid
+  metricId      String   @map("metric_id")
+  hour          DateTime @db.Timestamptz
+  count         Int      @default(0)
+  sum           Float?
+  min           Float?
+  max           Float?
+  lastValueJson Json?    @map("last_value_json") @db.JsonB
+  lastTs        DateTime? @map("last_ts") @db.Timestamptz
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt     DateTime @updatedAt @map("updated_at") @db.Timestamptz
+
+  tenant  Tenant  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  plant   Plant   @relation(fields: [plantId], references: [id], onDelete: Cascade)
+  gateway Gateway @relation(fields: [gatewayId], references: [id], onDelete: Cascade)
+  plc     Plc     @relation(fields: [plcId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, plantId, gatewayId, plcId, metricId, hour])
+  @@index([tenantId, plantId, metricId, hour(sort: Desc)])
+  @@map("telemetry_hourly")
+}
+
+model PlcState {
+  plcId          String   @id @map("plc_id") @db.Uuid
   tenantId       String   @map("tenant_id") @db.Uuid
   plantId        String   @map("plant_id") @db.Uuid
   lastTs         DateTime @map("last_ts") @db.Timestamptz
   lastValuesJson Json     @map("last_values_json") @db.JsonB
   updatedAt      DateTime @updatedAt @map("updated_at") @db.Timestamptz
 
-  machine Machine @relation(fields: [machineId], references: [id], onDelete: Cascade)
-  tenant  Tenant  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  plant   Plant   @relation(fields: [plantId], references: [id], onDelete: Cascade)
+  plc     Plc    @relation(fields: [plcId], references: [id], onDelete: Cascade)
+  tenant  Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  plant   Plant  @relation(fields: [plantId], references: [id], onDelete: Cascade)
 
   @@index([tenantId, plantId])
-  @@map("machine_state")
+  @@map("plc_state")
 }
 
 model Alarm {
   id           String   @id @default(uuid()) @db.Uuid
   tenantId     String   @map("tenant_id") @db.Uuid
   plantId      String   @map("plant_id") @db.Uuid
-  machineId    String   @map("machine_id") @db.Uuid
+  plcId        String   @map("plc_id") @db.Uuid
   ts           DateTime @db.Timestamptz
   type         String
   message      String
@@ -137,12 +221,56 @@ model Alarm {
   acknowledged Boolean  @default(false)
   createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz
 
-  machine Machine @relation(fields: [machineId], references: [id], onDelete: Cascade)
-  tenant  Tenant  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  plant   Plant   @relation(fields: [plantId], references: [id], onDelete: Cascade)
+  plc    Plc    @relation(fields: [plcId], references: [id], onDelete: Cascade)
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  plant  Plant  @relation(fields: [plantId], references: [id], onDelete: Cascade)
 
   @@index([tenantId, plantId, ts(sort: Desc)])
-  @@index([machineId, ts(sort: Desc)])
+  @@index([plcId, ts(sort: Desc)])
   @@index([acknowledged, severity])
   @@map("alarms")
+}
+
+model PlcDashboard {
+  id            String   @id @default(uuid()) @db.Uuid
+  tenantId      String   @map("tenant_id") @db.Uuid
+  plantId       String   @map("plant_id") @db.Uuid
+  plcId         String   @map("plc_id") @db.Uuid
+  name          String
+  iconUrl       String?  @map("icon_url")
+  layoutVersion Int      @default(1) @map("layout_version")
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt     DateTime @updatedAt @map("updated_at") @db.Timestamptz
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  plant  Plant  @relation(fields: [plantId], references: [id], onDelete: Cascade)
+  plc    Plc    @relation(fields: [plcId], references: [id], onDelete: Cascade)
+  widgets PlcDashboardWidget[]
+
+  @@unique([tenantId, plantId, plcId])
+  @@index([tenantId, plantId, plcId])
+  @@map("plc_dashboards")
+}
+
+model PlcDashboardWidget {
+  id              String   @id @default(uuid()) @db.Uuid
+  plcDashboardId  String   @map("plc_dashboard_id") @db.Uuid
+  widgetKey       String   @map("widget_key")
+  type            String
+  label           String
+  metricId        String   @map("metric_id")
+  unit            String?
+  dataType        String?  @map("data_type")
+  configJson      Json     @map("config_json") @db.JsonB
+  layoutJson      Json     @map("layout_json") @db.JsonB
+  sortOrder       Int      @default(0) @map("sort_order")
+  isVisible       Boolean  @default(true) @map("is_visible")
+  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt       DateTime @updatedAt @map("updated_at") @db.Timestamptz
+
+  dashboard PlcDashboard @relation(fields: [plcDashboardId], references: [id], onDelete: Cascade)
+
+  @@unique([plcDashboardId, widgetKey])
+  @@index([plcDashboardId])
+  @@map("plc_dashboard_widgets")
 }

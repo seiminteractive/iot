@@ -1,6 +1,6 @@
 <template>
-  <div class="status-light-container">
-    <div class="light-label">{{ label }}</div>
+  <div class="status-light-container" :class="{ compact: compact }">
+    <div v-if="!compact" class="light-label">{{ label }}</div>
     <div :class="['status-light', statusColor, isActive ? 'active' : 'inactive']"></div>
     <div class="light-status">{{ isActive ? 'Activo' : 'Inactivo' }}</div>
   </div>
@@ -24,6 +24,10 @@ export default {
       type: String,
       default: 'yellow', // 'yellow', 'red', 'green'
     },
+    compact: {
+      type: Boolean,
+      default: false,
+    },
   },
   setup(props) {
     const isActive = computed(() => {
@@ -46,18 +50,10 @@ export default {
   display: flex;
   flex-direction: column;
   align-items: center;
+  justify-content: center;
   gap: 0.5rem;
-  background: linear-gradient(135deg, #111111 0%, #0a0a0a 100%);
-  border: 1px solid #222222;
-  border-radius: 12px;
-  padding: 1rem;
-  min-width: 130px;
+  height: 100%;
   transition: all 0.3s ease;
-}
-
-.status-light-container:hover {
-  border-color: #333333;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
 }
 
 .light-label {
@@ -155,5 +151,19 @@ export default {
   font-size: 0.8rem;
   color: #888888;
   font-weight: 500;
+}
+
+/* Compact mode for admin preview */
+.status-light-container.compact {
+  gap: 0.25rem;
+}
+
+.status-light-container.compact .status-light {
+  width: 40px;
+  height: 40px;
+}
+
+.status-light-container.compact .light-status {
+  font-size: 0.7rem;
 }
 </style>

@@ -8,6 +8,7 @@ declare module 'fastify' {
       tenantId: string;
       role: string;
       plantAccess: string[];
+      isInternal: boolean;
     };
   }
 }

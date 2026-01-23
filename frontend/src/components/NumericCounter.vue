@@ -44,12 +44,16 @@ export default {
   display: flex;
   flex-direction: column;
   align-items: center;
+  justify-content: center;
   gap: 0.5rem;
   background: linear-gradient(135deg, #111111 0%, #0a0a0a 100%);
   border: 2px solid #222222;
   border-radius: 12px;
   padding: 1rem;
-  min-width: 130px;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  box-sizing: border-box;
   transition: all 0.3s ease;
 }
 

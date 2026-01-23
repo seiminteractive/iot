@@ -8,8 +8,8 @@ interface ClientConnection {
   ws: WebSocket;
   tenant?: string;
   plant?: string;
-  machineId?: string;
-  thingName?: string;
+  plcThingName?: string;
+  gatewayId?: string;
   lastPing: number;
 }
 
@@ -22,21 +22,21 @@ class ConnectionManager {
     ws: WebSocket,
     tenant?: string,
     plant?: string,
-    machineId?: string,
-    thingName?: string
+    plcThingName?: string,
+    gatewayId?: string
   ): void {
     this.clients.set(clientId, {
       ws,
       tenant,
       plant,
-      machineId,
-      thingName,
+      plcThingName,
+      gatewayId,
       lastPing: Date.now(),
     });
 
     metricsCollector.setWsConnections(this.clients.size);
     logger.info(
-      { clientId, tenant, plant, machineId, thingName, total: this.clients.size },
+      { clientId, tenant, plant, plcThingName, gatewayId, total: this.clients.size },
       'WebSocket client connected'
     );
 
@@ -100,10 +100,11 @@ class ConnectionManager {
       // Check if client is interested in this message
       const interestedInTenant = !client.tenant || client.tenant === message.tenant || client.tenant === '*';
       const interestedInPlant = !client.plant || client.plant === message.plant || client.plant === '*';
-      const interestedInMachine = !client.machineId || client.machineId === message.machineId || client.machineId === '*';
-      const interestedInGateway = !client.thingName || client.thingName === message.thingName || client.thingName === '*';
+      const interestedInPlc =
+        !client.plcThingName || client.plcThingName === message.plcThingName || client.plcThingName === '*';
+      const interestedInGateway = !client.gatewayId || client.gatewayId === message.gatewayId || client.gatewayId === '*';
 
-      if (interestedInTenant && interestedInPlant && interestedInMachine && interestedInGateway &&
+      if (interestedInTenant && interestedInPlant && interestedInPlc && interestedInGateway &&
           client.ws.readyState === WebSocket.OPEN) {
         try {
           client.ws.send(payload);

@@ -7,12 +7,12 @@ import { verifyFirebaseToken } from '../auth/firebase.js';
 const realtimePlugin: FastifyPluginAsync = async (fastify) => {
   fastify.get('/ws', { websocket: true }, async (socket, request) => {
     const clientId = randomUUID();
-    const { token, tenant, plant, machineId, thingName } = request.query as {
+    const { token, tenant, plant, plcThingName, gatewayId } = request.query as {
       token?: string;
       tenant?: string;
       plant?: string;
-      machineId?: string;
-      thingName?: string;
+      plcThingName?: string;
+      gatewayId?: string;
     };
 
     try {
@@ -42,13 +42,14 @@ const realtimePlugin: FastifyPluginAsync = async (fastify) => {
         return;
       }
 
+      const effectiveGatewayId = gatewayId;
       logger.info(
-        { clientId, tenant: effectiveTenant, plant, machineId, thingName, ip: request.ip },
+        { clientId, tenant: effectiveTenant, plant, plcThingName, gatewayId: effectiveGatewayId, ip: request.ip },
         'WebSocket connection request'
       );
 
       // Add client to connection manager
-      connectionManager.addClient(clientId, socket, effectiveTenant, plant, machineId, thingName);
+      connectionManager.addClient(clientId, socket, effectiveTenant, plant, plcThingName, effectiveGatewayId);
     } catch (error) {
       logger.error({ error, clientId }, 'WebSocket auth failed');
       socket.close(1008, 'Unauthorized');

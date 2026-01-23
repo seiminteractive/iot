@@ -51,13 +51,14 @@ services:
       AWS_IOT_CERT_PATH: /run/secrets/aws_iot_cert
       AWS_IOT_KEY_PATH: /run/secrets/aws_iot_key
       AWS_IOT_CA_PATH: /run/secrets/aws_iot_ca
-      MQTT_TOPICS_TELEMETRY: ${MQTT_TOPICS_TELEMETRY:-factory/+/+/+/+/telemetry}
-      MQTT_TOPICS_STATUS: ${MQTT_TOPICS_STATUS:-ops/+/+/+/gateway/+/status}
+      MQTT_TOPICS_TELEMETRY: ${MQTT_TOPICS_TELEMETRY:-factory/+/+/+/gateway/+/telemetry}
       REDIS_URL: redis://redis:6379
       REDIS_PREFIX: ${REDIS_PREFIX:-iot}
       FIREBASE_PROJECT_ID: ${FIREBASE_PROJECT_ID}
       FIREBASE_CLIENT_EMAIL: ${FIREBASE_CLIENT_EMAIL}
       FIREBASE_PRIVATE_KEY: ${FIREBASE_PRIVATE_KEY}
+      ADMIN_EMAILS: ${ADMIN_EMAILS:-}
+      PERSIST_DEFAULT_MODE: ${PERSIST_DEFAULT_MODE:-none}
       CORS_ORIGIN: ${CORS_ORIGIN:-https://testingiot.seiminteractive.io}
       LOG_LEVEL: ${LOG_LEVEL:-info}
     secrets:

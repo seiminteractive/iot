@@ -1,32 +1,37 @@
 <template>
-  <div class="plants-container">
-    <header class="plants-header">
-      <h1 class="page-title">Plantas</h1>
-    <p class="page-subtitle">Selecciona la planta que querés visualizar</p>
+  <div class="plcs-container">
+    <header class="plcs-header">
+      <h1 class="page-title">PLCs</h1>
+      <p class="page-subtitle">Selecciona el PLC que querés visualizar</p>
     </header>
 
-    <div v-if="loading" class="state-message">Cargando plantas...</div>
+    <div v-if="loading" class="state-message">Cargando PLCs...</div>
     <div v-else-if="error" class="state-message error">{{ error }}</div>
 
-    <div v-else class="plants-grid">
+    <div v-else class="plcs-grid">
       <div
-        v-for="plant in plants"
-        :key="plant"
-        class="plant-card"
-        :class="{ active: selectedPlant === plant }"
-        @click="selectPlant(plant)"
+        v-for="plc in plcs"
+        :key="plc.id"
+        class="plc-card"
+        :class="{ active: isSelected(plc) }"
+        @click="selectPlc(plc)"
       >
-        <div class="plant-icon">
+        <div class="plc-icon">
           <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M3 21V8l7-5 7 5v13" />
-            <path d="M9 21V12h6v9" />
+            <rect x="2" y="3" width="20" height="14" rx="2" />
+            <line x1="8" y1="21" x2="16" y2="21" />
+            <line x1="12" y1="17" x2="12" y2="21" />
           </svg>
         </div>
-        <div class="plant-info">
-          <h3 class="plant-name">{{ formatPlant(plant) }}</h3>
-          <p class="plant-id">{{ plant }}</p>
+        <div class="plc-info">
+          <h3 class="plc-name">{{ getPlcName(plc) }}</h3>
+          <p class="plc-location">{{ selectedPlant ? `Planta ${formatPlant(selectedPlant)}` : 'Planta' }}</p>
+          <div class="plc-status">
+            <div :class="['status-indicator', getStatus(plc)]"></div>
+            <span class="status-text">{{ getStatusText(getStatus(plc)) }}</span>
+          </div>
         </div>
-        <div v-if="selectedPlant === plant" class="selected-badge">
+        <div v-if="isSelected(plc)" class="selected-badge">
           <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
             <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/>
           </svg>
@@ -34,18 +39,21 @@
       </div>
     </div>
 
-    <div v-if="selectedPlant" class="selection-info">
-      <p>Planta seleccionada: <strong>{{ formatPlant(selectedPlant) }}</strong></p>
-      <p class="hint">Los PLCs y mediciones se filtran por esta planta</p>
+    <div v-if="!loading && !error && plcs.length === 0" class="state-message">
+      No hay PLCs disponibles para esta planta.
     </div>
   </div>
 </template>
 
 <script setup>
 const props = defineProps({
-  plants: {
+  plcs: {
     type: Array,
     default: () => [],
+  },
+  selectedPlcThingName: {
+    type: String,
+    default: null,
   },
   selectedPlant: {
     type: String,
@@ -63,9 +71,25 @@ const props = defineProps({
 
 const emit = defineEmits(['select']);
 
-const selectPlant = (plant) => {
-  emit('select', plant);
+const selectPlc = (plc) => {
+  if (plc?.plcThingName) {
+    emit('select', plc.plcThingName);
+  }
 };
+
+const isSelected = (plc) => props.selectedPlcThingName === plc.plcThingName;
+
+const getPlcName = (plc) => plc?.name || plc?.plcThingName || 'PLC';
+
+const getStatus = (plc) => {
+  if (!plc?.state?.lastTs) return 'offline';
+  const lastTs = new Date(plc.state.lastTs).getTime();
+  const now = Date.now();
+  const diffSeconds = (now - lastTs) / 1000;
+  return diffSeconds <= 30 ? 'online' : 'offline';
+};
+
+const getStatusText = (status) => (status === 'online' ? 'Online' : 'Offline');
 
 const formatPlant = (plant) => {
   if (!plant) return '-';
@@ -77,14 +101,14 @@ const formatPlant = (plant) => {
 </script>
 
 <style scoped>
-.plants-container {
+.plcs-container {
   padding: 1.5rem;
   max-width: 1200px;
   margin: 0 auto;
   padding-bottom: 100px;
 }
 
-.plants-header {
+.plcs-header {
   margin-bottom: 2rem;
 }
 
@@ -114,14 +138,14 @@ const formatPlant = (plant) => {
   color: #ef4444;
 }
 
-.plants-grid {
+.plcs-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
   gap: 1rem;
   margin-bottom: 2rem;
 }
 
-.plant-card {
+.plc-card {
   background: linear-gradient(135deg, #111111 0%, #0a0a0a 100%);
   border: 2px solid #222222;
   border-radius: 12px;
@@ -134,19 +158,19 @@ const formatPlant = (plant) => {
   gap: 1rem;
 }
 
-.plant-card:hover {
+.plc-card:hover {
   border-color: #8a2be2;
   box-shadow: 0 4px 16px rgba(138, 43, 226, 0.2);
   transform: translateY(-2px);
 }
 
-.plant-card.active {
+.plc-card.active {
   border-color: #8a2be2;
   background: linear-gradient(135deg, #1a0a2e 0%, #0f0520 100%);
   box-shadow: 0 4px 16px rgba(138, 43, 226, 0.3);
 }
 
-.plant-icon {
+.plc-icon {
   width: 44px;
   height: 44px;
   background: rgba(138, 43, 226, 0.1);
@@ -157,25 +181,53 @@ const formatPlant = (plant) => {
   color: #8a2be2;
 }
 
-.plant-icon svg {
+.plc-icon svg {
   width: 24px;
   height: 24px;
 }
 
-.plant-info {
+.plc-info {
   flex: 1;
 }
 
-.plant-name {
+.plc-name {
   font-size: 1.1rem;
   font-weight: 600;
   color: #ffffff;
   margin-bottom: 0.25rem;
 }
 
-.plant-id {
+.plc-location {
   font-size: 0.8rem;
   color: #666666;
+}
+
+.plc-status {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+}
+
+.status-indicator {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+}
+
+.status-indicator.online {
+  background: #10b981;
+  box-shadow: 0 0 6px #10b981;
+}
+
+.status-indicator.offline {
+  background: #ef4444;
+  box-shadow: 0 0 6px #ef4444;
+}
+
+.status-text {
+  font-size: 0.8rem;
+  color: #888888;
 }
 
 .selected-badge {
@@ -197,35 +249,8 @@ const formatPlant = (plant) => {
   height: 16px;
 }
 
-.selection-info {
-  background: linear-gradient(135deg, #1a0a2e 0%, #0f0520 100%);
-  border: 1px solid #8a2be2;
-  border-radius: 12px;
-  padding: 1.25rem;
-  text-align: center;
-}
-
-.selection-info p {
-  color: #cccccc;
-  margin-bottom: 0.5rem;
-}
-
-.selection-info p:last-child {
-  margin-bottom: 0;
-}
-
-.selection-info strong {
-  color: #8a2be2;
-  font-weight: 600;
-}
-
-.hint {
-  font-size: 0.85rem;
-  color: #888888;
-}
-
 @media (max-width: 768px) {
-  .plants-container {
+  .plcs-container {
     padding: 1rem;
     padding-bottom: 90px;
   }
@@ -234,7 +259,7 @@ const formatPlant = (plant) => {
     font-size: 1.5rem;
   }
 
-  .plants-grid {
+  .plcs-grid {
     grid-template-columns: 1fr;
   }
 }

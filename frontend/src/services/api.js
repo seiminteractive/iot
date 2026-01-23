@@ -27,24 +27,160 @@ const api = {
     return response.data;
   },
 
-  // Machines
-  async getMachines() {
-    const response = await apiClient.get('/api/machines');
+  async getTenantMe() {
+    const response = await apiClient.get('/api/tenants/me');
     return response.data;
   },
 
-  async getMachinesByPlant(plant) {
-    const response = await apiClient.get(`/api/machines/${plant}`);
+  async getPublicDashboard(tenantSlug, plantId, plcThingName) {
+    const response = await apiClient.get(`/tenants/${tenantSlug}/plants/${plantId}/plcs/${plcThingName}/dashboard`);
     return response.data;
   },
 
-  async getMachine(plant, machineId) {
-    const response = await apiClient.get(`/api/machines/${plant}/${machineId}`);
+  // Admin access
+  async getAdminAccess() {
+    const response = await apiClient.get('/api/admin/access');
     return response.data;
   },
 
-  async getMachineState(plant, machineId) {
-    const response = await apiClient.get(`/api/machines/${plant}/${machineId}/state`);
+  async getTenants() {
+    const response = await apiClient.get('/api/admin/tenants');
+    return response.data;
+  },
+
+  async createTenant(payload) {
+    const response = await apiClient.post('/api/admin/tenants', payload);
+    return response.data;
+  },
+
+  async updateTenant(tenantId, payload) {
+    const response = await apiClient.put(`/api/admin/tenants/${tenantId}`, payload);
+    return response.data;
+  },
+
+  async deleteTenant(tenantId) {
+    const response = await apiClient.delete(`/api/admin/tenants/${tenantId}`);
+    return response.data;
+  },
+
+  async getPlantsAdmin(params = {}) {
+    const response = await apiClient.get('/api/admin/plants', { params });
+    return response.data;
+  },
+
+  async createPlant(payload) {
+    const response = await apiClient.post('/api/admin/plants', payload);
+    return response.data;
+  },
+
+  async updatePlant(plantId, payload) {
+    const response = await apiClient.put(`/api/admin/plants/${plantId}`, payload);
+    return response.data;
+  },
+
+  async deletePlant(plantId) {
+    const response = await apiClient.delete(`/api/admin/plants/${plantId}`);
+    return response.data;
+  },
+
+  async getPlcsAdmin(tenantId, plantId) {
+    const response = await apiClient.get(`/api/admin/tenants/${tenantId}/plants/${plantId}/plcs`);
+    return response.data;
+  },
+
+  async getAllPlcsAdmin(params = {}) {
+    const response = await apiClient.get('/api/admin/plcs', { params });
+    return response.data;
+  },
+
+  async deletePlc(plcId) {
+    const response = await apiClient.delete(`/api/admin/plcs/${plcId}`);
+    return response.data;
+  },
+
+  async getDashboardByPlc(plcInternalId) {
+    const response = await apiClient.get(`/api/admin/plcs/${plcInternalId}/dashboard`);
+    return response.data;
+  },
+
+  async getPlcStateAdmin(plcInternalId) {
+    const response = await apiClient.get(`/api/admin/plcs/${plcInternalId}/state`);
+    return response.data;
+  },
+
+  async createDashboard(plcInternalId, payload) {
+    const response = await apiClient.post(`/api/admin/plcs/${plcInternalId}/dashboard`, payload);
+    return response.data;
+  },
+
+  async updateDashboard(dashboardId, payload) {
+    const response = await apiClient.put(`/api/admin/dashboards/${dashboardId}`, payload);
+    return response.data;
+  },
+
+  async deleteDashboard(dashboardId) {
+    const response = await apiClient.delete(`/api/admin/dashboards/${dashboardId}`);
+    return response.data;
+  },
+
+  async createDashboardWidget(dashboardId, payload) {
+    const response = await apiClient.post(`/api/admin/dashboards/${dashboardId}/widgets`, payload);
+    return response.data;
+  },
+
+  async updateDashboardWidget(widgetId, payload) {
+    const response = await apiClient.put(`/api/admin/widgets/${widgetId}`, payload);
+    return response.data;
+  },
+
+  async deleteDashboardWidget(widgetId) {
+    const response = await apiClient.delete(`/api/admin/widgets/${widgetId}`);
+    return response.data;
+  },
+
+  async reorderDashboardWidgets(dashboardId, items) {
+    const response = await apiClient.post(`/api/admin/dashboards/${dashboardId}/widgets/reorder`, { items });
+    return response.data;
+  },
+
+  async cloneDashboard(targetPlcId, sourcePlcId) {
+    const response = await apiClient.post(`/api/admin/plcs/${targetPlcId}/dashboard/clone-from/${sourcePlcId}`);
+    return response.data;
+  },
+
+  async getUsersAdmin() {
+    const response = await apiClient.get('/api/admin/users');
+    return response.data;
+  },
+
+  async createUserAdmin(payload) {
+    const response = await apiClient.post('/api/admin/users', payload);
+    return response.data;
+  },
+
+  async updateUserClaims(uid, payload) {
+    const response = await apiClient.put(`/api/admin/users/${uid}/claims`, payload);
+    return response.data;
+  },
+
+  // PLCs
+  async getPlcs() {
+    const response = await apiClient.get('/api/plcs');
+    return response.data;
+  },
+
+  async getPlcsByPlant(plant) {
+    const response = await apiClient.get(`/api/plcs/${plant}`);
+    return response.data;
+  },
+
+  async getPlc(plant, plcThingName) {
+    const response = await apiClient.get(`/api/plcs/${plant}/${plcThingName}`);
+    return response.data;
+  },
+
+  async getPlcState(plant, plcThingName) {
+    const response = await apiClient.get(`/api/plcs/${plant}/${plcThingName}/state`);
     return response.data;
   },
 
@@ -55,8 +191,8 @@ const api = {
   },
 
   // Telemetry
-  async getTelemetry(plant, machineId, params = {}) {
-    const response = await apiClient.get(`/api/telemetry/${plant}/${machineId}`, { params });
+  async getTelemetry(plant, plcThingName, params = {}) {
+    const response = await apiClient.get(`/api/telemetry/${plant}/${plcThingName}`, { params });
     return response.data;
   },
 
@@ -71,13 +207,34 @@ const api = {
     return response.data;
   },
 
-  async getAlarmsForMachine(plant, machineId, params = {}) {
-    const response = await apiClient.get(`/api/alarms/${plant}/${machineId}`, { params });
+  async getAlarmsForPlc(plant, plcThingName, params = {}) {
+    const response = await apiClient.get(`/api/alarms/${plant}/${plcThingName}`, { params });
     return response.data;
   },
 
   async acknowledgeAlarm(alarmId) {
     const response = await apiClient.post(`/api/alarms/${alarmId}/acknowledge`);
+    return response.data;
+  },
+
+  // Persist rules (admin)
+  async getPersistRules(params = {}) {
+    const response = await apiClient.get('/api/persist-rules', { params });
+    return response.data;
+  },
+
+  async createPersistRule(payload, params = {}) {
+    const response = await apiClient.post('/api/persist-rules', payload, { params });
+    return response.data;
+  },
+
+  async updatePersistRule(id, payload, params = {}) {
+    const response = await apiClient.put(`/api/persist-rules/${id}`, payload, { params });
+    return response.data;
+  },
+
+  async deletePersistRule(id, params = {}) {
+    const response = await apiClient.delete(`/api/persist-rules/${id}`, { params });
     return response.data;
   },
 };
