@@ -397,10 +397,15 @@
               {{ user.plantAccess?.join(', ') || '*' }}
             </div>
             <div class="list-item-actions">
-              <button class="btn-icon" title="Editar" @click="prefillClaims(user)">
+              <button class="btn-icon" title="Editar" @click="openEditUserModal(user)">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                   <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/>
                   <path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/>
+                </svg>
+              </button>
+              <button class="btn-icon" title="Eliminar" @click="confirmDeleteUser(user)">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/>
                 </svg>
               </button>
             </div>
@@ -565,16 +570,69 @@
         </div>
       </div>
     </Teleport>
+
+    <!-- Edit User modal -->
+    <Teleport to="body">
+      <div v-if="editUserModal.show" class="modal-overlay" @click.self="editUserModal.show = false">
+        <div class="modal modal-form">
+          <h3>Editar permisos de usuario</h3>
+          <form @submit.prevent="executeEditUser">
+            <div class="form-field">
+              <label>Email</label>
+              <input :value="editUserModal.email" disabled />
+            </div>
+            <div class="form-field">
+              <label>Tenant</label>
+              <select v-model="editUserModal.tenantId">
+                <option value="">Sin cambio</option>
+                <option v-for="tenant in tenants" :key="tenant.id" :value="tenant.slug">
+                  {{ tenant.slug }}
+                </option>
+              </select>
+            </div>
+            <div class="form-field">
+              <label>Rol</label>
+              <select v-model="editUserModal.role">
+                <option value="">Sin cambio</option>
+                <option value="viewer">Viewer</option>
+                <option value="plant_operator">Plant Operator</option>
+                <option value="manager">Manager</option>
+                <option value="admin">Admin</option>
+              </select>
+            </div>
+            <div class="form-field">
+              <label>Acceso a plantas</label>
+              <input 
+                v-model="editUserModal.plantAccess" 
+                placeholder="planta-1, planta-2 o *"
+              />
+            </div>
+            <div class="form-field checkbox-field">
+              <label class="toggle-label">
+                <input type="checkbox" v-model="editUserModal.disabled" class="toggle-input" />
+                <span class="toggle-switch"></span>
+                <span class="toggle-text">Deshabilitar usuario</span>
+              </label>
+            </div>
+            <div class="modal-actions">
+              <button type="button" class="btn-ghost" @click="editUserModal.show = false">Cancelar</button>
+              <button type="submit" class="btn-primary">Guardar cambios</button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </Teleport>
   </div>
 </template>
 
 <script setup>
-import { computed, onMounted, ref, watch, nextTick } from 'vue';
+import { computed, onMounted, ref, watch, nextTick, onBeforeUnmount } from 'vue';
 import { useRouter } from 'vue-router';
 import { GridStack } from 'gridstack';
 import 'gridstack/dist/gridstack.min.css';
 import api from '../services/api';
 import PersistRules from './PersistRules.vue';
+import { connect as wsConnect, disconnect as wsDisconnect, onMessage } from '../services/websocket';
 
 const router = useRouter();
 
@@ -630,6 +688,17 @@ const editPlantModal = ref({
   province: '',
   plantId: '',
   name: '',
+});
+
+// Edit User modal
+const editUserModal = ref({
+  show: false,
+  uid: '',
+  email: '',
+  tenantId: '',
+  role: '',
+  plantAccess: '',
+  disabled: false,
 });
 
 // Computed
@@ -876,6 +945,45 @@ const executeEditPlant = async () => {
   }
 };
 
+const openEditUserModal = (user) => {
+  editUserModal.value = {
+    show: true,
+    uid: user.uid,
+    email: user.email,
+    tenantId: user.tenantId || '',
+    role: user.role || '',
+    plantAccess: user.plantAccess?.join(', ') || '*',
+    disabled: user.disabled || false,
+  };
+};
+
+const executeEditUser = async () => {
+  try {
+    const payload = {};
+    if (editUserModal.value.tenantId) payload.tenantId = editUserModal.value.tenantId;
+    if (editUserModal.value.role) payload.role = editUserModal.value.role;
+    if (editUserModal.value.plantAccess) payload.plantAccess = parsePlantAccess(editUserModal.value.plantAccess);
+    payload.disabled = editUserModal.value.disabled;
+
+    await api.updateUserClaims(editUserModal.value.uid, payload);
+    editUserModal.value.show = false;
+    await refreshUsers();
+  } catch (error) {
+    console.error('Error updating user:', error);
+    alert(error.response?.data?.error || 'Error al actualizar los permisos del usuario');
+  }
+};
+
+const confirmDeleteUser = (user) => {
+  deleteModal.value = {
+    show: true,
+    title: 'Eliminar usuario',
+    message: `¿Eliminar "${user.email}"? Esta acción no se puede deshacer.`,
+    type: 'user',
+    item: user,
+  };
+};
+
 const confirmDeletePlc = (plc) => {
   deleteModal.value = {
     show: true,
@@ -902,6 +1010,9 @@ const executeDelete = async () => {
       if (selectedTenantId.value && selectedPlantId.value) {
         plcs.value = await api.getPlcsAdmin(selectedTenantId.value, selectedPlantId.value);
       }
+    } else if (type === 'user') {
+      await api.deleteUser(item.uid);
+      await refreshUsers();
     }
   } catch (error) {
     console.error('Error deleting:', error);
@@ -921,6 +1032,23 @@ onMounted(async () => {
   await refreshPlants();
   await refreshUsers();
   await refreshAllPlcs();
+
+  // Conectar WebSocket para recibir cambios de estado de PLCs
+  const unsubscribe = onMessage((msg) => {
+    if (msg.type === 'plc_state_changed') {
+      // Actualizar el PLC en la lista
+      const plcIndex = allPlcs.value.findIndex(p => p.id === msg.plcId);
+      if (plcIndex !== -1) {
+        allPlcs.value[plcIndex].isOnline = msg.isOnline;
+        allPlcs.value[plcIndex].lastSeenAt = msg.lastSeenAt;
+      }
+    }
+  });
+
+  // Cleanup al desmontar
+  onBeforeUnmount(() => {
+    unsubscribe?.();
+  });
 });
 </script>
 <style scoped>
@@ -1358,6 +1486,53 @@ onMounted(async () => {
   width: 18px;
   height: 18px;
   accent-color: #f5f5f7;
+}
+
+.toggle-label {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  cursor: pointer;
+}
+
+.toggle-input {
+  display: none;
+}
+
+.toggle-switch {
+  position: relative;
+  display: inline-block;
+  width: 44px;
+  height: 24px;
+  background: #2d2d2d;
+  border-radius: 12px;
+  transition: background-color 0.3s ease;
+}
+
+.toggle-switch::after {
+  content: '';
+  position: absolute;
+  width: 20px;
+  height: 20px;
+  background: #f5f5f7;
+  border-radius: 10px;
+  top: 2px;
+  left: 2px;
+  transition: left 0.3s ease;
+}
+
+.toggle-input:checked + .toggle-switch {
+  background: #8a2be2;
+}
+
+.toggle-input:checked + .toggle-switch::after {
+  left: 22px;
+}
+
+.toggle-text {
+  font-size: 0.9rem;
+  color: #86868b;
+  user-select: none;
 }
 
 /* Modal */

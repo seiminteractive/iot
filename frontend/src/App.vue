@@ -25,21 +25,6 @@
       </div>
 
       <template v-else>
-        <header v-if="currentTab !== 'admin'" class="app-header">
-          <div class="header-container">
-            <div class="logo-section">
-              <img src="./assets/image.png" alt="Granix" class="logo" />
-            </div>
-            <div class="header-actions">
-              <div class="connection-status">
-                <div :class="['status-dot', wsConnected ? 'online' : 'offline']"></div>
-                <span class="status-text">{{ wsConnected ? 'Conectado' : 'Desconectado' }}</span>
-              </div>
-              <button @click="handleLogout" class="logout-button">Cerrar Sesión</button>
-            </div>
-          </div>
-        </header>
-
         <main class="app-main">
         <!-- Plantas Tab -->
         <Plants
@@ -55,7 +40,7 @@
         <Plcs
           v-if="currentTab === 'plcs'"
           :plcs="plcs"
-          :selectedPlcThingName="selectedPlcThingName"
+          :selectedPlc="selectedPlc"
           :selectedPlant="selectedPlant"
           :loading="plcsLoading"
           :error="plcsError"
@@ -79,57 +64,63 @@
         <AdminPanel v-if="currentTab === 'admin'" :tab="adminTab" />
         </main>
 
-        <!-- Bottom Navigation (operador) -->
+        <!-- Bottom Navigation (operador) Apple-style -->
         <nav v-if="showOperatorTabs && currentTab !== 'admin'" class="bottom-nav">
-        <button
-          v-if="showPlantsTab"
-          class="nav-item"
-          :class="{ active: currentTab === 'plants' }"
-          @click="currentTab = 'plants'"
-        >
-          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M3 21V8l7-5 7 5v13" />
-            <path d="M9 21V12h6v9" />
-          </svg>
-          <span>Plantas</span>
-        </button>
-        <button
-          v-if="showOperatorTabs"
-          class="nav-item"
-          :class="{ active: currentTab === 'plcs' }"
-          @click="currentTab = 'plcs'"
-        >
-          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <rect x="2" y="3" width="20" height="14" rx="2" />
-            <line x1="8" y1="21" x2="16" y2="21" />
-            <line x1="12" y1="17" x2="12" y2="21" />
-          </svg>
-          <span>PLCs</span>
-        </button>
-        <button
-          v-if="showOperatorTabs"
-          class="nav-item"
-          :class="{ active: currentTab === 'dashboard' }"
-          @click="currentTab = 'dashboard'"
-        >
-          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M3 3v18h18" />
-            <path d="M18.7 8l-5.1 5.2-2.8-2.7L7 14.3" />
-          </svg>
-          <span>Mediciones</span>
-        </button>
-        <button
-          v-if="showAdminTab"
-          class="nav-item"
-          :class="{ active: currentTab === 'admin' }"
-          @click="currentTab = 'admin'"
-        >
-          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <circle cx="12" cy="12" r="3" />
-            <path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 0 1-4 0v-.1a1.7 1.7 0 0 0-1-1.5 1.7 1.7 0 0 0-1.9.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.9 1.7 1.7 0 0 0-1.5-1H3a2 2 0 0 1 0-4h.1a1.7 1.7 0 0 0 1.5-1 1.7 1.7 0 0 0-.3-1.9l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.9.3 1.7 1.7 0 0 0 1-1.5V3a2 2 0 0 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.9-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.9 1.7 1.7 0 0 0 1.5 1H21a2 2 0 0 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z" />
-          </svg>
-          <span>Admin</span>
-        </button>
+          <button
+            v-if="showPlantsTab"
+            class="nav-item"
+            :class="{ active: currentTab === 'plants' }"
+            @click="currentTab = 'plants'"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M3 21V8l7-5 7 5v13" />
+              <path d="M9 21V12h6v9" />
+            </svg>
+            <span>Plantas</span>
+          </button>
+          <button
+            class="nav-item"
+            :class="{ active: currentTab === 'plcs' }"
+            @click="currentTab = 'plcs'"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <rect x="2" y="3" width="20" height="14" rx="2" />
+              <line x1="8" y1="21" x2="16" y2="21" />
+              <line x1="12" y1="17" x2="12" y2="21" />
+            </svg>
+            <span>PLCs</span>
+          </button>
+          <button
+            class="nav-item"
+            :class="{ active: currentTab === 'dashboard' }"
+            @click="currentTab = 'dashboard'"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M3 3v18h18" />
+              <path d="M18.7 8l-5.1 5.2-2.8-2.7L7 14.3" />
+            </svg>
+            <span>Mediciones</span>
+          </button>
+          <button
+            v-if="showAdminTab"
+            class="nav-item"
+            :class="{ active: currentTab === 'admin' }"
+            @click="currentTab = 'admin'"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="12" cy="12" r="3" />
+              <path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 0 1-4 0v-.1a1.7 1.7 0 0 0-1-1.5 1.7 1.7 0 0 0-1.9.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.9 1.7 1.7 0 0 0-1.5-1H3a2 2 0 0 1 0-4h.1a1.7 1.7 0 0 0 1.5-1 1.7 1.7 0 0 0-.3-1.9l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.9.3 1.7 1.7 0 0 0 1-1.5V3a2 2 0 0 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.9-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.9 1.7 1.7 0 0 0 1.5 1H21a2 2 0 0 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z" />
+            </svg>
+            <span>Admin</span>
+          </button>
+          <button class="nav-item logout" @click="handleLogout">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+              <path d="M16 17l5-5-5-5" />
+              <path d="M21 12H9" />
+            </svg>
+            <span>Salir</span>
+          </button>
         </nav>
 
         <!-- Bottom Navigation (admin mode) -->
@@ -250,10 +241,10 @@ export default {
     const currentMetricsValues = ref({});
     const wsConnected = ref(false);
     const showDataStream = ref(false);
-    const plants = ref([]);
-    const selectedPlant = ref(null);
-    const plcs = ref([]);
-    const selectedPlcThingName = ref(null);
+    const plants = ref([]); // Array de objetos { id, plantId, province, name }
+    const selectedPlant = ref(null); // Objeto planta completo o null
+    const plcs = ref([]); // Array de objetos PLC
+    const selectedPlc = ref(null); // Objeto PLC completo o null
     const isAdmin = ref(false);
     const isAdminOnly = ref(false); // Solo admin, sin acceso a plantas
     const tenantInfo = ref(null);
@@ -366,9 +357,9 @@ export default {
     }
 
     function matchesSelection(msg) {
-      if (!selectedPlant.value) return false;
-      if (msg.plant !== selectedPlant.value) return false;
-      if (selectedPlcThingName.value && msg.plcThingName !== selectedPlcThingName.value) return false;
+      if (!selectedPlant.value?.plantId) return false;
+      if (msg.plant !== selectedPlant.value.plantId) return false;
+      if (selectedPlc.value?.plcThingName && msg.plcThingName !== selectedPlc.value.plcThingName) return false;
       return true;
     }
 
@@ -441,7 +432,7 @@ export default {
           plants.value = [];
           selectedPlant.value = null;
           plcs.value = [];
-          selectedPlcThingName.value = null;
+          selectedPlc.value = null;
           isAdmin.value = false;
           isAdminOnly.value = false;
           tenantInfo.value = null;
@@ -481,13 +472,13 @@ export default {
 
     const handleLogout = async () => {
       const result = await logout();
-      if (result.success) {
+        if (result.success) {
         isAuthenticated.value = false;
         currentUser.value = null;
         plants.value = [];
         selectedPlant.value = null;
         plcs.value = [];
-        selectedPlcThingName.value = null;
+        selectedPlc.value = null;
         plantsError.value = '';
         plcsError.value = '';
         resetTelemetry();
@@ -501,7 +492,10 @@ export default {
       try {
         const data = await api.getPlants();
         plants.value = Array.isArray(data) ? data : [];
-        if (!selectedPlant.value || !plants.value.includes(selectedPlant.value)) {
+        // Si no hay planta seleccionada o la seleccionada ya no existe, seleccionar la primera
+        const selectedId = selectedPlant.value?.id;
+        const stillExists = plants.value.find(p => p.id === selectedId);
+        if (!stillExists) {
           selectedPlant.value = plants.value[0] || null;
         }
       } catch (error) {
@@ -514,26 +508,28 @@ export default {
       }
     }
 
-    async function loadPlcs(plantId) {
-      if (!plantId) {
+    async function loadPlcs(plant) {
+      if (!plant?.id) {
         plcs.value = [];
-        selectedPlcThingName.value = null;
+        selectedPlc.value = null;
         return;
       }
       plcsLoading.value = true;
       plcsError.value = '';
       try {
-        const data = await api.getPlcsByPlant(plantId);
+        const data = await api.getPlcsByPlantId(plant.id);
         plcs.value = Array.isArray(data) ? data : [];
-        const plcThingNames = plcs.value.map(plc => plc.plcThingName);
-        if (!selectedPlcThingName.value || !plcThingNames.includes(selectedPlcThingName.value)) {
-          selectedPlcThingName.value = plcThingNames[0] || null;
+        // Si no hay PLC seleccionado o el seleccionado ya no existe, seleccionar el primero
+        const selectedId = selectedPlc.value?.id;
+        const stillExists = plcs.value.find(p => p.id === selectedId);
+        if (!stillExists) {
+          selectedPlc.value = plcs.value[0] || null;
         }
       } catch (error) {
         console.error('Error al cargar PLCs:', error);
         plcsError.value = 'No se pudieron cargar los PLCs.';
         plcs.value = [];
-        selectedPlcThingName.value = null;
+        selectedPlc.value = null;
       } finally {
         plcsLoading.value = false;
       }
@@ -564,7 +560,7 @@ export default {
     }
 
     async function loadDashboard() {
-      if (!tenantInfo.value?.slug || !selectedPlant.value || !selectedPlcThingName.value) {
+      if (!tenantInfo.value?.slug || !selectedPlant.value?.plantId || !selectedPlc.value?.plcThingName) {
         dashboardData.value = null;
         return;
       }
@@ -573,8 +569,8 @@ export default {
       try {
         dashboardData.value = await api.getPublicDashboard(
           tenantInfo.value.slug,
-          selectedPlant.value,
-          selectedPlcThingName.value
+          selectedPlant.value.plantId,
+          selectedPlc.value.plcThingName
         );
       } catch (error) {
         dashboardData.value = null;
@@ -585,7 +581,7 @@ export default {
     }
 
     function handleSelectPlant(plant) {
-      if (plant !== selectedPlant.value) {
+      if (plant?.id !== selectedPlant.value?.id) {
         selectedPlant.value = plant;
       }
       if (currentTab.value === 'plants') {
@@ -593,9 +589,9 @@ export default {
       }
     }
 
-    function handleSelectPlc(plcThingName) {
-      if (plcThingName !== selectedPlcThingName.value) {
-        selectedPlcThingName.value = plcThingName;
+    function handleSelectPlc(plc) {
+      if (plc?.id !== selectedPlc.value?.id) {
+        selectedPlc.value = plc;
       }
     }
 
@@ -605,7 +601,7 @@ export default {
       loadDashboard();
     });
 
-    watch(selectedPlcThingName, () => {
+    watch(selectedPlc, () => {
       resetTelemetry();
       loadDashboard();
     });
@@ -640,7 +636,7 @@ export default {
       plantsLoading,
       plantsError,
       plcs,
-      selectedPlcThingName,
+      selectedPlc,
       plcsLoading,
       plcsError,
       isAdmin,
@@ -703,151 +699,62 @@ html, body {
   letter-spacing: 0.2px;
 }
 
-/* Header */
-.app-header {
-  background: linear-gradient(180deg, #0a0a0a 0%, #000000 100%);
-  border-bottom: 1px solid #1a1a1a;
-  padding: 1rem;
-  position: sticky;
-  top: 0;
-  z-index: 100;
-  backdrop-filter: blur(10px);
-}
-
-.header-container {
-  max-width: 1600px;
-  margin: 0 auto;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  width: 100%;
-}
-
-.header-actions {
-  display: flex;
-  align-items: center;
-  gap: 1rem;
-}
-
-.logout-button {
-  padding: 0.5rem 1rem;
-  background: rgba(239, 68, 68, 0.1);
-  border: 1px solid rgba(239, 68, 68, 0.3);
-  border-radius: 8px;
-  color: #ef4444;
-  font-size: 0.85rem;
-  font-weight: 500;
-  cursor: pointer;
-  transition: all 0.3s ease;
-}
-
-.logout-button:hover {
-  background: rgba(239, 68, 68, 0.2);
-  border-color: rgba(239, 68, 68, 0.5);
-  box-shadow: 0 2px 8px rgba(239, 68, 68, 0.2);
-}
-
-.logo-section {
-  display: flex;
-  align-items: center;
-  gap: 1rem;
-}
-
-.logo {
-  width: 8rem;
-  height: auto;
-  opacity: 0.95;
-}
-
-.brand-name {
-  font-size: 1.3rem;
-  font-weight: 700;
-  letter-spacing: -0.5px;
-}
-
-.connection-status {
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-  padding: 0.5rem 1rem;
-  background: rgba(0, 0, 0, 0.4);
-  border-radius: 8px;
-  border: 1px solid #1a1a1a;
-}
-
-.status-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  animation: pulse 2s infinite;
-}
-
-.status-dot.online {
-  background: #10b981;
-  box-shadow: 0 0 6px #10b981;
-}
-
-.status-dot.offline {
-  background: #ef4444;
-  box-shadow: 0 0 6px #ef4444;
-}
-
-@keyframes pulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.6; }
-}
-
-.status-text {
-  font-size: 0.85rem;
-  color: #888888;
-}
 
 /* Main Content */
 .app-main {
   flex: 1;
   width: 100%;
   overflow-y: auto;
+  padding-bottom: 80px; /* Space for bottom nav */
 }
 
-/* Bottom Navigation */
+/* Bottom Navigation - Apple Style */
 .bottom-nav {
   position: fixed;
   bottom: 0;
   left: 0;
   right: 0;
-  background: linear-gradient(180deg, #0a0a0a 0%, #000000 100%);
-  border-top: 1px solid #1a1a1a;
+  height: 72px;
+  background: #0d0d0d;
+  border-top: 1px solid #1d1d1f;
   display: flex;
-  justify-content: space-around;
-  padding: 0.75rem 0;
+  justify-content: center;
+  align-items: center;
+  gap: 1.5rem;
+  padding: 0 2rem;
   z-index: 1000;
-  backdrop-filter: blur(10px);
 }
 
 .nav-item {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 0.25rem;
-  padding: 0.5rem 1.5rem;
-  background: none;
+  justify-content: center;
+  gap: 0.35rem;
+  height: 56px;
+  padding: 0 1.25rem;
+  background: transparent;
   border: none;
-  color: #666666;
+  border-radius: 10px;
+  color: #86868b;
+  font-size: 0.7rem;
+  font-weight: 500;
   cursor: pointer;
-  transition: all 0.3s ease;
-  border-radius: 8px;
+  transition: all 0.2s ease;
+  min-width: 72px;
 }
 
 .nav-item svg {
-  width: 24px;
-  height: 24px;
-  transition: all 0.3s ease;
+  width: 22px;
+  height: 22px;
+  stroke-width: 1.8;
+  transition: all 0.2s ease;
 }
 
 .nav-item span {
-  font-size: 0.75rem;
+  font-size: 0.7rem;
   font-weight: 500;
-  transition: all 0.3s ease;
+  transition: all 0.2s ease;
 }
 
 .nav-item:hover {
@@ -857,11 +764,20 @@ html, body {
 
 .nav-item.active {
   color: #f5f5f7;
-  background: rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.08);
 }
 
 .nav-item.active svg {
-  transform: scale(1.05);
+  stroke-width: 2;
+}
+
+.nav-item.logout {
+  color: #86868b;
+}
+
+.nav-item.logout:hover {
+  color: #ef4444;
+  background: rgba(239, 68, 68, 0.1);
 }
 
 /* Admin Navigation */

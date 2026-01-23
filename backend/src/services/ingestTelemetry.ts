@@ -6,6 +6,7 @@ import { NormalizedTelemetryMessage } from '../types/index.js';
 import { broadcastToClients } from '../ws/broadcast.js';
 import { getPersistDecision, resolvePersistRule } from './persistRules.js';
 import { upsertTelemetryHourly } from './hourlyAggregation.js';
+import { updatePLCState } from './plcStateTracker.js';
 
 interface MetricValue {
   id: string;
@@ -270,6 +271,15 @@ export async function ingestTelemetry(topic: string, rawPayload: any): Promise<v
         lastValuesJson: mergedValues,
       },
     });
+
+    // Update PLC state tracker and emit state change events
+    await updatePLCState(
+      plc.id,
+      normalized.plcThingName,
+      tenant.id,
+      plant.id,
+      new Date(normalized.timestamp)
+    );
 
     logger.info(
       { 

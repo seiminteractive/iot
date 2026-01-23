@@ -1,50 +1,90 @@
 <template>
   <div class="dashboard-container">
-    <header class="dashboard-header">
-      <div class="tenant-info" v-if="tenant">
-        <img v-if="tenant.icon_url" :src="tenant.icon_url" alt="Tenant icon" class="tenant-icon" />
-        <div>
-          <h1>{{ dashboard?.name || 'Dashboard' }}</h1>
-          <p class="muted">{{ tenant.name }} · {{ plant?.plant_id }} · {{ plc?.plc_thing_name }}</p>
-        </div>
+    <!-- Loading State -->
+    <div v-if="loading" class="empty-state">
+      <div class="empty-state-icon loading-icon">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+          <circle cx="12" cy="12" r="10" stroke-dasharray="31.4" stroke-dashoffset="10" />
+        </svg>
       </div>
-    </header>
-
-    <div v-if="loading" class="state-message">Cargando dashboard...</div>
-    <div v-else-if="error" class="state-message error">{{ error }}</div>
-
-    <div v-else class="widgets-grid">
-      <div
-        v-for="(widget, index) in visibleWidgets"
-        :key="widget.id"
-        class="widget-card"
-        :class="{
-          'no-padding': widget.type === 'status',
-          'inner-only': widget.type === 'gauge' || widget.type === 'counter',
-        }"
-        :style="gridStyle(widget, index)"
-      >
-        <!-- Gauge/Counter ya dibujan su propio recuadro + título -->
-        <div v-if="widget.type !== 'status' && widget.type !== 'gauge' && widget.type !== 'counter'" class="widget-header">
-          <span>{{ widget.label }}</span>
-          <span class="muted">{{ widget.unit || '' }}</span>
-        </div>
-
-        <component
-          :is="resolveComponent(widget.type)"
-          v-if="resolveComponent(widget.type)"
-          :label="widget.label"
-          :value="resolveValue(widget)"
-          :max="widget.config_json?.max"
-          :unit="widget.unit"
-          :color="widget.config_json?.color"
-        />
-
-        <div v-else class="widget-unknown">
-          {{ metricValue(widget.metric_id) }}
-        </div>
-      </div>
+      <h2 class="empty-state-title">Cargando dashboard</h2>
+      <p class="empty-state-subtitle">Obteniendo datos del servidor...</p>
     </div>
+
+    <!-- Error State -->
+    <div v-else-if="error" class="empty-state">
+      <div class="empty-state-icon error-icon">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+          <circle cx="12" cy="12" r="10" />
+          <line x1="12" y1="8" x2="12" y2="12" />
+          <circle cx="12" cy="16" r="0.5" fill="currentColor" />
+        </svg>
+      </div>
+      <h2 class="empty-state-title">No se pudo cargar el dashboard</h2>
+      <p class="empty-state-subtitle">{{ error }}</p>
+      <p class="empty-state-hint">Verificá que tengas un PLC seleccionado con un dashboard configurado.</p>
+    </div>
+
+    <!-- No Dashboard State -->
+    <div v-else-if="!dashboard || widgets.length === 0" class="empty-state">
+      <div class="empty-state-icon">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+          <rect x="3" y="3" width="7" height="7" rx="1" />
+          <rect x="14" y="3" width="7" height="7" rx="1" />
+          <rect x="3" y="14" width="7" height="7" rx="1" />
+          <rect x="14" y="14" width="7" height="7" rx="1" />
+        </svg>
+      </div>
+      <h2 class="empty-state-title">Sin dashboard configurado</h2>
+      <p class="empty-state-subtitle">Este PLC aún no tiene un dashboard con widgets.</p>
+      <p class="empty-state-hint">Contactá al administrador para configurar las mediciones.</p>
+    </div>
+
+    <!-- Dashboard Content -->
+    <template v-else>
+      <header class="dashboard-header">
+        <div class="tenant-info" v-if="tenant">
+          <img v-if="tenant.icon_url" :src="tenant.icon_url" alt="Tenant icon" class="tenant-icon" />
+          <div>
+            <h1>{{ dashboard?.name || 'Dashboard' }}</h1>
+            <p class="muted">{{ tenant.name }} · {{ plant?.plant_id }} · {{ plc?.plc_thing_name }}</p>
+          </div>
+        </div>
+      </header>
+
+      <div class="widgets-grid">
+        <div
+          v-for="(widget, index) in visibleWidgets"
+          :key="widget.id"
+          class="widget-card"
+          :class="{
+            'no-padding': widget.type === 'status',
+            'inner-only': widget.type === 'gauge' || widget.type === 'counter',
+          }"
+          :style="gridStyle(widget, index)"
+        >
+          <!-- Gauge/Counter ya dibujan su propio recuadro + título -->
+          <div v-if="widget.type !== 'status' && widget.type !== 'gauge' && widget.type !== 'counter'" class="widget-header">
+            <span>{{ widget.label }}</span>
+            <span class="muted">{{ widget.unit || '' }}</span>
+          </div>
+
+          <component
+            :is="resolveComponent(widget.type)"
+            v-if="resolveComponent(widget.type)"
+            :label="widget.label"
+            :value="resolveValue(widget)"
+            :max="widget.config_json?.max"
+            :unit="widget.unit"
+            :color="widget.config_json?.color"
+          />
+
+          <div v-else class="widget-unknown">
+            {{ metricValue(widget.metric_id) }}
+          </div>
+        </div>
+      </div>
+    </template>
   </div>
 </template>
 
@@ -203,17 +243,73 @@ const gridStyle = (widget, index) => {
   color: #ffffff;
 }
 
-.state-message {
-  padding: 1rem;
-  border-radius: 12px;
-  background: #0f0f0f;
-  border: 1px solid #222222;
-  color: #cccccc;
+/* Empty State - Apple Style */
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 60vh;
   text-align: center;
+  padding: 3rem 2rem;
 }
 
-.state-message.error {
-  border-color: rgba(239, 68, 68, 0.4);
-  color: #ef4444;
+.empty-state-icon {
+  width: 80px;
+  height: 80px;
+  background: #1d1d1f;
+  border-radius: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 1.5rem;
+  color: #48484a;
+}
+
+.empty-state-icon svg {
+  width: 40px;
+  height: 40px;
+}
+
+.empty-state-icon.loading-icon {
+  color: #86868b;
+}
+
+.empty-state-icon.loading-icon svg {
+  animation: spin 1.5s linear infinite;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.empty-state-icon.error-icon {
+  background: rgba(255, 69, 58, 0.1);
+  color: #ff453a;
+}
+
+.empty-state-title {
+  font-size: 1.5rem;
+  font-weight: 600;
+  color: #f5f5f7;
+  margin: 0 0 0.5rem 0;
+  letter-spacing: -0.3px;
+}
+
+.empty-state-subtitle {
+  font-size: 1rem;
+  color: #86868b;
+  margin: 0 0 1rem 0;
+  max-width: 380px;
+  line-height: 1.5;
+}
+
+.empty-state-hint {
+  font-size: 0.85rem;
+  color: #48484a;
+  margin: 0;
+  max-width: 380px;
+  line-height: 1.5;
 }
 </style>

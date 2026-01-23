@@ -32,16 +32,21 @@ export interface NormalizedTelemetryMessage {
 }
 
 export interface WSMessage {
-  type: 'telemetry' | 'alarm' | 'ping';
-  tenant: string;
-  plant: string;
+  type: 'telemetry' | 'alarm' | 'ping' | 'plc_state_changed';
+  tenant?: string;
+  plant?: string;
   plcThingName?: string;
+  plcId?: string;
+  tenantId?: string;
+  plantId?: string;
   gatewayId?: string;
-  ts: number;
+  ts?: number;
   values?: Record<string, any>;
   message?: string;
   severity?: string;
   origin?: string;
+  isOnline?: boolean;
+  lastSeenAt?: string;
 }
 
 export interface MetricsData {

@@ -400,6 +400,20 @@ const adminRoutes: FastifyPluginAsync = async (fastify) => {
     return reply.send({ success: true });
   });
 
+  fastify.delete<{ Params: { uid: string } }>('/admin/users/:uid', async (request, reply) => {
+    if (!requireInternal(request)) {
+      return reply.code(403).send({ error: 'Forbidden' });
+    }
+    const { uid } = request.params;
+    const auth = getFirebaseAuth();
+    try {
+      await auth.deleteUser(uid);
+      return reply.send({ success: true });
+    } catch (error) {
+      return reply.code(404).send({ error: 'User not found or could not be deleted' });
+    }
+  });
+
   // Dashboards
   fastify.get<{ Params: { plcId: string } }>('/admin/plcs/:plcId/dashboard', async (request, reply) => {
     if (!requireInternal(request)) {

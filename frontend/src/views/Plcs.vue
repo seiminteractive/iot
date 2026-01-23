@@ -25,7 +25,7 @@
         </div>
         <div class="plc-info">
           <h3 class="plc-name">{{ getPlcName(plc) }}</h3>
-          <p class="plc-location">{{ selectedPlant ? `Planta ${formatPlant(selectedPlant)}` : 'Planta' }}</p>
+          <p class="plc-location">{{ getPlantInfo(plc) }}</p>
           <div class="plc-status">
             <div :class="['status-indicator', getStatus(plc)]"></div>
             <span class="status-text">{{ getStatusText(getStatus(plc)) }}</span>
@@ -51,12 +51,12 @@ const props = defineProps({
     type: Array,
     default: () => [],
   },
-  selectedPlcThingName: {
-    type: String,
+  selectedPlc: {
+    type: Object,
     default: null,
   },
   selectedPlant: {
-    type: String,
+    type: Object,
     default: null,
   },
   loading: {
@@ -72,14 +72,21 @@ const props = defineProps({
 const emit = defineEmits(['select']);
 
 const selectPlc = (plc) => {
-  if (plc?.plcThingName) {
-    emit('select', plc.plcThingName);
-  }
+  emit('select', plc);
 };
 
-const isSelected = (plc) => props.selectedPlcThingName === plc.plcThingName;
+const isSelected = (plc) => props.selectedPlc?.id === plc.id;
 
 const getPlcName = (plc) => plc?.name || plc?.plcThingName || 'PLC';
+
+const getPlantInfo = (plc) => {
+  const province = plc?.plant?.province || props.selectedPlant?.province;
+  const plantName = plc?.plant?.name || props.selectedPlant?.name || props.selectedPlant?.plantId;
+  if (province && plantName) {
+    return `${formatName(province)} · ${formatName(plantName)}`;
+  }
+  return plantName ? formatName(plantName) : 'Planta';
+};
 
 const getStatus = (plc) => {
   if (!plc?.state?.lastTs) return 'offline';
@@ -91,9 +98,9 @@ const getStatus = (plc) => {
 
 const getStatusText = (status) => (status === 'online' ? 'Online' : 'Offline');
 
-const formatPlant = (plant) => {
-  if (!plant) return '-';
-  return plant
+const formatName = (name) => {
+  if (!name) return '-';
+  return name
     .split('-')
     .map(word => word.charAt(0).toUpperCase() + word.slice(1))
     .join(' ');
@@ -101,11 +108,13 @@ const formatPlant = (plant) => {
 </script>
 
 <style scoped>
+/* Apple-style PLCs View */
 .plcs-container {
-  padding: 1.5rem;
+  padding: 2rem;
   max-width: 1200px;
   margin: 0 auto;
-  padding-bottom: 100px;
+  min-height: 100vh;
+  background: #000000;
 }
 
 .plcs-header {
@@ -113,146 +122,161 @@ const formatPlant = (plant) => {
 }
 
 .page-title {
-  font-size: 1.8rem;
-  font-weight: 700;
-  color: #ffffff;
-  margin-bottom: 0.5rem;
+  font-size: 2rem;
+  font-weight: 600;
+  color: #f5f5f7;
+  margin: 0 0 0.25rem 0;
+  letter-spacing: -0.5px;
 }
 
 .page-subtitle {
   font-size: 0.95rem;
-  color: #888888;
+  color: #86868b;
+  margin: 0;
 }
 
 .state-message {
-  padding: 1rem;
-  border-radius: 12px;
-  background: #0f0f0f;
-  border: 1px solid #222222;
-  color: #cccccc;
+  padding: 1.5rem;
+  border-radius: 16px;
+  background: #0d0d0d;
+  border: 1px solid #1d1d1f;
+  color: #86868b;
   text-align: center;
+  font-size: 0.95rem;
 }
 
 .state-message.error {
-  border-color: rgba(239, 68, 68, 0.4);
-  color: #ef4444;
+  border-color: rgba(255, 69, 58, 0.3);
+  color: #ff453a;
+  background: rgba(255, 69, 58, 0.08);
 }
 
 .plcs-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
   gap: 1rem;
   margin-bottom: 2rem;
 }
 
 .plc-card {
-  background: linear-gradient(135deg, #111111 0%, #0a0a0a 100%);
-  border: 2px solid #222222;
-  border-radius: 12px;
+  background: #0d0d0d;
+  border: 1px solid #1d1d1f;
+  border-radius: 16px;
   padding: 1.5rem;
   cursor: pointer;
-  transition: all 0.3s ease;
+  transition: all 0.2s ease;
   position: relative;
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 1rem;
 }
 
 .plc-card:hover {
-  border-color: #8a2be2;
-  box-shadow: 0 4px 16px rgba(138, 43, 226, 0.2);
-  transform: translateY(-2px);
+  border-color: #2d2d2d;
+  background: #141414;
 }
 
 .plc-card.active {
-  border-color: #8a2be2;
-  background: linear-gradient(135deg, #1a0a2e 0%, #0f0520 100%);
-  box-shadow: 0 4px 16px rgba(138, 43, 226, 0.3);
+  border-color: #f5f5f7;
+  background: #1a1a1a;
 }
 
 .plc-icon {
-  width: 44px;
-  height: 44px;
-  background: rgba(138, 43, 226, 0.1);
-  border-radius: 10px;
+  width: 48px;
+  height: 48px;
+  background: #1d1d1f;
+  border-radius: 12px;
   display: flex;
   align-items: center;
   justify-content: center;
-  color: #8a2be2;
+  color: #86868b;
+  flex-shrink: 0;
+}
+
+.plc-card.active .plc-icon {
+  background: #f5f5f7;
+  color: #000000;
 }
 
 .plc-icon svg {
   width: 24px;
   height: 24px;
+  stroke-width: 1.8;
 }
 
 .plc-info {
   flex: 1;
+  min-width: 0;
 }
 
 .plc-name {
-  font-size: 1.1rem;
+  font-size: 1rem;
   font-weight: 600;
-  color: #ffffff;
-  margin-bottom: 0.25rem;
+  color: #f5f5f7;
+  margin: 0 0 0.35rem 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .plc-location {
   font-size: 0.8rem;
-  color: #666666;
+  color: #86868b;
+  margin: 0 0 0.75rem 0;
 }
 
 .plc-status {
-  display: flex;
+  display: inline-flex;
   align-items: center;
   gap: 0.5rem;
-  margin-top: 0.5rem;
+  padding: 0.35rem 0.75rem;
+  background: #1d1d1f;
+  border-radius: 20px;
 }
 
 .status-indicator {
-  width: 10px;
-  height: 10px;
+  width: 8px;
+  height: 8px;
   border-radius: 50%;
 }
 
 .status-indicator.online {
-  background: #10b981;
-  box-shadow: 0 0 6px #10b981;
+  background: #30d158;
+  box-shadow: 0 0 8px rgba(48, 209, 88, 0.5);
 }
 
 .status-indicator.offline {
-  background: #ef4444;
-  box-shadow: 0 0 6px #ef4444;
+  background: #48484a;
 }
 
 .status-text {
-  font-size: 0.8rem;
-  color: #888888;
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: #86868b;
 }
 
 .selected-badge {
   position: absolute;
   top: 1rem;
   right: 1rem;
-  width: 28px;
-  height: 28px;
-  background: #8a2be2;
+  width: 24px;
+  height: 24px;
+  background: #f5f5f7;
   border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
-  color: #ffffff;
+  color: #000000;
 }
 
 .selected-badge svg {
-  width: 16px;
-  height: 16px;
+  width: 14px;
+  height: 14px;
 }
 
 @media (max-width: 768px) {
   .plcs-container {
-    padding: 1rem;
-    padding-bottom: 90px;
+    padding: 1.5rem;
   }
 
   .page-title {
@@ -261,6 +285,10 @@ const formatPlant = (plant) => {
 
   .plcs-grid {
     grid-template-columns: 1fr;
+  }
+
+  .plc-card {
+    padding: 1.25rem;
   }
 }
 </style>

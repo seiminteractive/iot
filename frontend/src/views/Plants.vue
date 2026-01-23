@@ -11,9 +11,9 @@
     <div v-else class="plants-grid">
       <div
         v-for="plant in plants"
-        :key="plant"
+        :key="plant.id"
         class="plant-card"
-        :class="{ active: selectedPlant === plant }"
+        :class="{ active: isSelected(plant) }"
         @click="selectPlant(plant)"
       >
         <div class="plant-icon">
@@ -23,10 +23,10 @@
           </svg>
         </div>
         <div class="plant-info">
-          <h3 class="plant-name">{{ formatPlant(plant) }}</h3>
-          <p class="plant-id">{{ plant }}</p>
+          <h3 class="plant-name">{{ plant.name || formatName(plant.plantId) }}</h3>
+          <p class="plant-id">{{ formatProvince(plant.province) }} · {{ plant.plantId }}</p>
         </div>
-        <div v-if="selectedPlant === plant" class="selected-badge">
+        <div v-if="isSelected(plant)" class="selected-badge">
           <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
             <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/>
           </svg>
@@ -35,8 +35,8 @@
     </div>
 
     <div v-if="selectedPlant" class="selection-info">
-      <p>Planta seleccionada: <strong>{{ formatPlant(selectedPlant) }}</strong></p>
-      <p class="hint">Los PLCs y mediciones se filtran por esta planta</p>
+      <p>Planta seleccionada: <strong>{{ selectedPlant.name || formatName(selectedPlant.plantId) }}</strong></p>
+      <p class="hint">{{ formatProvince(selectedPlant.province) }} · {{ selectedPlant.plantId }}</p>
     </div>
   </div>
 </template>
@@ -48,7 +48,7 @@ const props = defineProps({
     default: () => [],
   },
   selectedPlant: {
-    type: String,
+    type: Object,
     default: null,
   },
   loading: {
@@ -63,13 +63,23 @@ const props = defineProps({
 
 const emit = defineEmits(['select']);
 
+const isSelected = (plant) => props.selectedPlant?.id === plant.id;
+
 const selectPlant = (plant) => {
   emit('select', plant);
 };
 
-const formatPlant = (plant) => {
-  if (!plant) return '-';
-  return plant
+const formatName = (name) => {
+  if (!name) return '-';
+  return name
+    .split('-')
+    .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(' ');
+};
+
+const formatProvince = (province) => {
+  if (!province) return '';
+  return province
     .split('-')
     .map(word => word.charAt(0).toUpperCase() + word.slice(1))
     .join(' ');
@@ -77,11 +87,13 @@ const formatPlant = (plant) => {
 </script>
 
 <style scoped>
+/* Apple-style Plants View */
 .plants-container {
-  padding: 1.5rem;
+  padding: 2rem;
   max-width: 1200px;
   margin: 0 auto;
-  padding-bottom: 100px;
+  min-height: 100vh;
+  background: #000000;
 }
 
 .plants-header {
@@ -89,45 +101,49 @@ const formatPlant = (plant) => {
 }
 
 .page-title {
-  font-size: 1.8rem;
-  font-weight: 700;
-  color: #ffffff;
-  margin-bottom: 0.5rem;
+  font-size: 2rem;
+  font-weight: 600;
+  color: #f5f5f7;
+  margin: 0 0 0.25rem 0;
+  letter-spacing: -0.5px;
 }
 
 .page-subtitle {
   font-size: 0.95rem;
-  color: #888888;
+  color: #86868b;
+  margin: 0;
 }
 
 .state-message {
-  padding: 1rem;
-  border-radius: 12px;
-  background: #0f0f0f;
-  border: 1px solid #222222;
-  color: #cccccc;
+  padding: 1.5rem;
+  border-radius: 16px;
+  background: #0d0d0d;
+  border: 1px solid #1d1d1f;
+  color: #86868b;
   text-align: center;
+  font-size: 0.95rem;
 }
 
 .state-message.error {
-  border-color: rgba(239, 68, 68, 0.4);
-  color: #ef4444;
+  border-color: rgba(255, 69, 58, 0.3);
+  color: #ff453a;
+  background: rgba(255, 69, 58, 0.08);
 }
 
 .plants-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
   gap: 1rem;
   margin-bottom: 2rem;
 }
 
 .plant-card {
-  background: linear-gradient(135deg, #111111 0%, #0a0a0a 100%);
-  border: 2px solid #222222;
-  border-radius: 12px;
+  background: #0d0d0d;
+  border: 1px solid #1d1d1f;
+  border-radius: 16px;
   padding: 1.5rem;
   cursor: pointer;
-  transition: all 0.3s ease;
+  transition: all 0.2s ease;
   position: relative;
   display: flex;
   align-items: center;
@@ -135,79 +151,90 @@ const formatPlant = (plant) => {
 }
 
 .plant-card:hover {
-  border-color: #8a2be2;
-  box-shadow: 0 4px 16px rgba(138, 43, 226, 0.2);
-  transform: translateY(-2px);
+  border-color: #2d2d2d;
+  background: #141414;
 }
 
 .plant-card.active {
-  border-color: #8a2be2;
-  background: linear-gradient(135deg, #1a0a2e 0%, #0f0520 100%);
-  box-shadow: 0 4px 16px rgba(138, 43, 226, 0.3);
+  border-color: #f5f5f7;
+  background: #1a1a1a;
 }
 
 .plant-icon {
-  width: 44px;
-  height: 44px;
-  background: rgba(138, 43, 226, 0.1);
-  border-radius: 10px;
+  width: 48px;
+  height: 48px;
+  background: #1d1d1f;
+  border-radius: 12px;
   display: flex;
   align-items: center;
   justify-content: center;
-  color: #8a2be2;
+  color: #86868b;
+  flex-shrink: 0;
+}
+
+.plant-card.active .plant-icon {
+  background: #f5f5f7;
+  color: #000000;
 }
 
 .plant-icon svg {
   width: 24px;
   height: 24px;
+  stroke-width: 1.8;
 }
 
 .plant-info {
   flex: 1;
+  min-width: 0;
 }
 
 .plant-name {
-  font-size: 1.1rem;
+  font-size: 1rem;
   font-weight: 600;
-  color: #ffffff;
-  margin-bottom: 0.25rem;
+  color: #f5f5f7;
+  margin: 0 0 0.35rem 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .plant-id {
   font-size: 0.8rem;
-  color: #666666;
+  color: #86868b;
+  margin: 0;
 }
 
 .selected-badge {
   position: absolute;
   top: 1rem;
   right: 1rem;
-  width: 28px;
-  height: 28px;
-  background: #8a2be2;
+  width: 24px;
+  height: 24px;
+  background: #f5f5f7;
   border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
-  color: #ffffff;
+  color: #000000;
 }
 
 .selected-badge svg {
-  width: 16px;
-  height: 16px;
+  width: 14px;
+  height: 14px;
 }
 
 .selection-info {
-  background: linear-gradient(135deg, #1a0a2e 0%, #0f0520 100%);
-  border: 1px solid #8a2be2;
-  border-radius: 12px;
+  background: #0d0d0d;
+  border: 1px solid #2d2d2d;
+  border-radius: 16px;
   padding: 1.25rem;
   text-align: center;
 }
 
 .selection-info p {
-  color: #cccccc;
-  margin-bottom: 0.5rem;
+  color: #86868b;
+  margin: 0 0 0.35rem 0;
+  font-size: 0.95rem;
 }
 
 .selection-info p:last-child {
@@ -215,19 +242,18 @@ const formatPlant = (plant) => {
 }
 
 .selection-info strong {
-  color: #8a2be2;
+  color: #f5f5f7;
   font-weight: 600;
 }
 
 .hint {
   font-size: 0.85rem;
-  color: #888888;
+  color: #48484a;
 }
 
 @media (max-width: 768px) {
   .plants-container {
-    padding: 1rem;
-    padding-bottom: 90px;
+    padding: 1.5rem;
   }
 
   .page-title {
@@ -236,6 +262,10 @@ const formatPlant = (plant) => {
 
   .plants-grid {
     grid-template-columns: 1fr;
+  }
+
+  .plant-card {
+    padding: 1.25rem;
   }
 }
 </style>

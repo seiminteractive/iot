@@ -163,6 +163,11 @@ const api = {
     return response.data;
   },
 
+  async deleteUser(uid) {
+    const response = await apiClient.delete(`/api/admin/users/${uid}`);
+    return response.data;
+  },
+
   // PLCs
   async getPlcs() {
     const response = await apiClient.get('/api/plcs');
@@ -171,6 +176,11 @@ const api = {
 
   async getPlcsByPlant(plant) {
     const response = await apiClient.get(`/api/plcs/${plant}`);
+    return response.data;
+  },
+
+  async getPlcsByPlantId(plantId) {
+    const response = await apiClient.get(`/api/plcs/by-plant/${plantId}`);
     return response.data;
   },
 

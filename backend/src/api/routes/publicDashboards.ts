@@ -56,8 +56,16 @@ const publicDashboardsRoutes: FastifyPluginAsync = async (fastify) => {
         },
       },
     });
+
+    // El PLC existe pero no tiene dashboard configurado - esto no es un error
     if (!dashboard) {
-      return reply.code(404).send({ error: 'Dashboard not found' });
+      return reply.send({
+        tenant: { slug: tenant.slug, name: tenant.name, icon_url: tenant.iconUrl },
+        plant: { plant_id: plant.plantId, name: plant.name },
+        plc: { plc_thing_name: plc.plcThingName, name: plc.name },
+        dashboard: null,
+        widgets: [],
+      });
     }
 
     return reply.send({
