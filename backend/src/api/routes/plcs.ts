@@ -19,7 +19,7 @@ const plcsRoutes: FastifyPluginAsync = async (fastify) => {
     const plcs = await prisma.plc.findMany({
       where: {
         tenantId: tenant.id,
-        ...(plants.includes('*') ? {} : { plant: { plantId: { in: plants } } }),
+        ...(plants.includes('*') ? {} : { plantId: { in: plants } }),
       },
       include: {
         state: true,
@@ -62,7 +62,7 @@ const plcsRoutes: FastifyPluginAsync = async (fastify) => {
       }
 
       const plants = allowedPlants(request);
-      if (!plants.includes('*') && !plants.includes(plant.plantId)) {
+      if (!plants.includes('*') && !plants.includes(plant.id)) {
         return reply.code(403).send({ error: 'Forbidden' });
       }
 
@@ -105,16 +105,27 @@ const plcsRoutes: FastifyPluginAsync = async (fastify) => {
       if (!tenant) {
         return reply.code(403).send({ error: 'Invalid tenant' });
       }
+      
+      // Resolve plantId string to UUID
+      const plantRecord = await prisma.plant.findFirst({
+        where: { tenantId: tenant.id, plantId: plant },
+        select: { id: true },
+      });
+      
+      if (!plantRecord) {
+        return reply.code(404).send({ error: 'Plant not found' });
+      }
+      
       const plants = allowedPlants(request);
 
-      if (!plants.includes('*') && !plants.includes(plant)) {
+      if (!plants.includes('*') && !plants.includes(plantRecord.id)) {
         return reply.code(403).send({ error: 'Forbidden' });
       }
 
       const plcs = await prisma.plc.findMany({
         where: {
           tenantId: tenant.id,
-          plant: { plantId: plant },
+          plantId: plantRecord.id,
         },
         include: {
           state: true,
@@ -147,12 +158,8 @@ const plcsRoutes: FastifyPluginAsync = async (fastify) => {
       if (!tenant) {
         return reply.code(403).send({ error: 'Invalid tenant' });
       }
-      const plants = allowedPlants(request);
-
-      if (!plants.includes('*') && !plants.includes(plant)) {
-        return reply.code(403).send({ error: 'Forbidden' });
-      }
-
+      
+      // Resolve plantId string to UUID
       const plantRecord = await prisma.plant.findFirst({
         where: { tenantId: tenant.id, plantId: plant },
         select: { id: true },
@@ -160,6 +167,12 @@ const plcsRoutes: FastifyPluginAsync = async (fastify) => {
 
       if (!plantRecord) {
         return reply.code(404).send({ error: 'Plant not found' });
+      }
+      
+      const plants = allowedPlants(request);
+
+      if (!plants.includes('*') && !plants.includes(plantRecord.id)) {
+        return reply.code(403).send({ error: 'Forbidden' });
       }
 
       const plc = await prisma.plc.findUnique({
@@ -202,12 +215,8 @@ const plcsRoutes: FastifyPluginAsync = async (fastify) => {
       if (!tenant) {
         return reply.code(403).send({ error: 'Invalid tenant' });
       }
-      const plants = allowedPlants(request);
-
-      if (!plants.includes('*') && !plants.includes(plant)) {
-        return reply.code(403).send({ error: 'Forbidden' });
-      }
-
+      
+      // Resolve plantId string to UUID
       const plantRecord = await prisma.plant.findFirst({
         where: { tenantId: tenant.id, plantId: plant },
         select: { id: true },
@@ -215,6 +224,12 @@ const plcsRoutes: FastifyPluginAsync = async (fastify) => {
 
       if (!plantRecord) {
         return reply.code(404).send({ error: 'Plant not found' });
+      }
+      
+      const plants = allowedPlants(request);
+
+      if (!plants.includes('*') && !plants.includes(plantRecord.id)) {
+        return reply.code(403).send({ error: 'Forbidden' });
       }
 
       const plc = await prisma.plc.findUnique({
@@ -253,7 +268,7 @@ const plcsRoutes: FastifyPluginAsync = async (fastify) => {
     const plantRecords = await prisma.plant.findMany({
       where: {
         tenantId: tenant.id,
-        ...(plants.includes('*') ? {} : { plantId: { in: plants } }),
+        ...(plants.includes('*') ? {} : { id: { in: plants } }),
       },
       select: {
         id: true,

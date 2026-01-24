@@ -17,6 +17,7 @@ import plcsRoutes from './api/routes/plcs.js';
 import telemetryRoutes from './api/routes/telemetry.js';
 import alarmsRoutes from './api/routes/alarms.js';
 import persistRulesRoutes from './api/routes/persistRules.js';
+import chartDataRoutes from './api/routes/chartData.js';
 import adminRoutes from './api/routes/admin.js';
 import publicDashboardsRoutes from './api/routes/publicDashboards.js';
 import tenantsRoutes from './api/routes/tenants.js';
@@ -56,6 +57,7 @@ async function start() {
     await fastify.register(telemetryRoutes, { prefix: '/api' });
     await fastify.register(alarmsRoutes, { prefix: '/api' });
     await fastify.register(persistRulesRoutes, { prefix: '/api' });
+    await fastify.register(chartDataRoutes, { prefix: '/api' });
     await fastify.register(adminRoutes, { prefix: '/api' });
     await fastify.register(tenantsRoutes, { prefix: '/api' });
     await fastify.register(publicDashboardsRoutes);

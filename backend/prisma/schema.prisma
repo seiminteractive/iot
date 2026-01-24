@@ -13,9 +13,7 @@ datasource db {
 
 enum PersistMode {
   raw
-  hourly
-  both
-  none
+  interval
 }
 
 enum PersistAggregate {
@@ -40,7 +38,7 @@ model Tenant {
   plcStates       PlcState[]
   alarms          Alarm[]
   persistRules    PersistRule[]
-  telemetryHourly TelemetryHourly[]
+  telemetryAggregated TelemetryAggregated[]
   plcDashboards   PlcDashboard[]
 
   @@map("tenants")
@@ -58,7 +56,7 @@ model Plant {
   plcs            Plc[]
   gateways        Gateway[]
   telemetryEvents TelemetryEvent[]
-  telemetryHourly TelemetryHourly[]
+  telemetryAggregated TelemetryAggregated[]
   plcStates       PlcState[]
   alarms          Alarm[]
   plcDashboards   PlcDashboard[]
@@ -86,7 +84,7 @@ model Gateway {
   plcs            Plc[]
   persistRules    PersistRule[]
   telemetryEvents TelemetryEvent[]
-  telemetryHourly TelemetryHourly[]
+  telemetryAggregated TelemetryAggregated[]
 
   @@unique([tenantId, gatewayId])
   @@index([tenantId, plantId])
@@ -107,7 +105,7 @@ model Plc {
   gateway Gateway @relation(fields: [gatewayId], references: [id], onDelete: Cascade)
 
   telemetryEvents TelemetryEvent[]
-  telemetryHourly TelemetryHourly[]
+  telemetryAggregated TelemetryAggregated[]
   state           PlcState?
   alarms          Alarm[]
   dashboards      PlcDashboard[]
@@ -144,17 +142,18 @@ model TelemetryEvent {
 }
 
 model PersistRule {
-  id         String   @id @default(uuid()) @db.Uuid
-  tenantId   String   @map("tenant_id") @db.Uuid
-  plantId    String?  @map("plant_id") @db.Uuid
-  gatewayId  String?  @map("gateway_id") @db.Uuid
-  plcId      String?  @map("plc_id") @db.Uuid
-  metricId   String   @map("metric_id")
-  mode       PersistMode
-  aggregate  PersistAggregate?
-  retentionDays Int  @map("retention_days") @default(7)
-  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz
-  updatedAt  DateTime @updatedAt @map("updated_at") @db.Timestamptz
+  id              String   @id @default(uuid()) @db.Uuid
+  tenantId        String   @map("tenant_id") @db.Uuid
+  plantId         String?  @map("plant_id") @db.Uuid
+  gatewayId       String?  @map("gateway_id") @db.Uuid
+  plcId           String?  @map("plc_id") @db.Uuid
+  metricId        String   @map("metric_id")
+  mode            PersistMode
+  intervalMinutes Int?     @map("interval_minutes") // Solo para mode=interval, cada cuántos minutos agregar
+  aggregate       PersistAggregate?
+  retentionDays   Int      @map("retention_days") @default(7)
+  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt       DateTime @updatedAt @map("updated_at") @db.Timestamptz
 
   tenant  Tenant  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   plant   Plant?  @relation(fields: [plantId], references: [id], onDelete: Cascade)
@@ -166,31 +165,32 @@ model PersistRule {
   @@map("persist_rules")
 }
 
-model TelemetryHourly {
-  id            String   @id @default(uuid()) @db.Uuid
-  tenantId      String   @map("tenant_id") @db.Uuid
-  plantId       String   @map("plant_id") @db.Uuid
-  gatewayId     String   @map("gateway_id") @db.Uuid
-  plcId         String   @map("plc_id") @db.Uuid
-  metricId      String   @map("metric_id")
-  hour          DateTime @db.Timestamptz
-  count         Int      @default(0)
-  sum           Float?
-  min           Float?
-  max           Float?
-  lastValueJson Json?    @map("last_value_json") @db.JsonB
-  lastTs        DateTime? @map("last_ts") @db.Timestamptz
-  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz
-  updatedAt     DateTime @updatedAt @map("updated_at") @db.Timestamptz
+model TelemetryAggregated {
+  id              String   @id @default(uuid()) @db.Uuid
+  tenantId        String   @map("tenant_id") @db.Uuid
+  plantId         String   @map("plant_id") @db.Uuid
+  gatewayId       String   @map("gateway_id") @db.Uuid
+  plcId           String   @map("plc_id") @db.Uuid
+  metricId        String   @map("metric_id")
+  bucket          DateTime @db.Timestamptz // Inicio del intervalo (puede ser cada X minutos)
+  intervalMinutes Int      @map("interval_minutes") // Duración del intervalo en minutos
+  count           Int      @default(0)
+  sum             Float?
+  min             Float?
+  max             Float?
+  lastValueJson   Json?    @map("last_value_json") @db.JsonB
+  lastTs          DateTime? @map("last_ts") @db.Timestamptz
+  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt       DateTime @updatedAt @map("updated_at") @db.Timestamptz
 
   tenant  Tenant  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   plant   Plant   @relation(fields: [plantId], references: [id], onDelete: Cascade)
   gateway Gateway @relation(fields: [gatewayId], references: [id], onDelete: Cascade)
   plc     Plc     @relation(fields: [plcId], references: [id], onDelete: Cascade)
 
-  @@unique([tenantId, plantId, gatewayId, plcId, metricId, hour])
-  @@index([tenantId, plantId, metricId, hour(sort: Desc)])
-  @@map("telemetry_hourly")
+  @@unique([tenantId, plantId, gatewayId, plcId, metricId, bucket, intervalMinutes])
+  @@index([tenantId, plantId, plcId, metricId, bucket(sort: Desc)])
+  @@map("telemetry_aggregated")
 }
 
 model PlcState {

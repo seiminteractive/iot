@@ -1,7 +1,9 @@
 import { logger } from '../utils/logger.js';
 import { publishWsMessage } from '../ws/pubsub.js';
 
-const ONLINE_THRESHOLD_MS = 15 * 1000;
+// Tiempo sin recibir datos para considerar un PLC offline
+// Con datos cada 1 segundo, 30 segundos da margen suficiente para jitter de red
+const OFFLINE_THRESHOLD_MS = 30 * 1000;
 
 interface PLCOnlineState {
   plcId: string;
@@ -17,20 +19,21 @@ const plcStates = new Map<string, PLCOnlineState>();
 
 /**
  * Actualiza el estado de un PLC y emite evento si cambió
+ * @param receivedAt - Momento en que el servidor recibió el mensaje (usar new Date())
  */
 export async function updatePLCState(
   plcId: string,
   plcThingName: string,
   tenantId: string,
   plantId: string,
-  lastTs: Date
+  receivedAt: Date
 ) {
-  const now = Date.now();
-  const lastTsMs = lastTs.getTime();
-  const isOnline = now - lastTsMs < ONLINE_THRESHOLD_MS;
-
+  const receivedAtMs = receivedAt.getTime();
   const previousState = plcStates.get(plcId);
-  const wasOnline = previousState?.isOnline ?? true; // Asumir online si no hay estado anterior
+  const wasOnline = previousState?.isOnline ?? false; // Asumir offline si no hay estado anterior
+
+  // Si recibimos un mensaje, el PLC está online
+  const isOnline = true;
 
   // Guardar nuevo estado
   plcStates.set(plcId, {
@@ -39,14 +42,14 @@ export async function updatePLCState(
     tenantId,
     plantId,
     isOnline,
-    lastTs: lastTsMs,
+    lastTs: receivedAtMs,
   });
 
-  // Si cambió el estado, emitir evento
-  if (isOnline !== wasOnline) {
+  // Solo emitir evento si pasó de offline a online
+  if (!wasOnline && isOnline) {
     logger.info(
-      { plcId, plcThingName, wasOnline, isOnline },
-      'PLC state changed'
+      { plcId, plcThingName },
+      'PLC came online'
     );
 
     await publishWsMessage({
@@ -55,8 +58,8 @@ export async function updatePLCState(
       plcThingName,
       tenantId,
       plantId,
-      isOnline,
-      lastSeenAt: lastTs.toISOString(),
+      isOnline: true,
+      lastSeenAt: receivedAt.toISOString(),
     });
   }
 }
@@ -67,10 +70,9 @@ export async function updatePLCState(
  */
 export async function checkOfflinePLCs() {
   const now = Date.now();
-  const staleThreshold = 60 * 1000; // 1 minuto
 
   for (const [plcId, state] of plcStates.entries()) {
-    if (state.isOnline && now - state.lastTs > staleThreshold) {
+    if (state.isOnline && now - state.lastTs > OFFLINE_THRESHOLD_MS) {
       // Marcar como offline
       logger.warn({ plcId: state.plcThingName }, 'PLC marked as offline due to inactivity');
 

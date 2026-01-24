@@ -6,9 +6,10 @@ import { config } from '../config/env.js';
 
 interface ClientConnection {
   ws: WebSocket;
-  tenant?: string;
-  plant?: string;
-  plcThingName?: string;
+  tenantId?: string;
+  plantId?: string;
+  allowedPlantIds?: string[];
+  plcId?: string;
   gatewayId?: string;
   lastPing: number;
 }
@@ -20,23 +21,25 @@ class ConnectionManager {
   addClient(
     clientId: string,
     ws: WebSocket,
-    tenant?: string,
-    plant?: string,
-    plcThingName?: string,
+    tenantId?: string,
+    plantId?: string,
+    allowedPlantIds?: string[],
+    plcId?: string,
     gatewayId?: string
   ): void {
     this.clients.set(clientId, {
       ws,
-      tenant,
-      plant,
-      plcThingName,
+      tenantId,
+      plantId,
+      allowedPlantIds,
+      plcId,
       gatewayId,
       lastPing: Date.now(),
     });
 
     metricsCollector.setWsConnections(this.clients.size);
     logger.info(
-      { clientId, tenant, plant, plcThingName, gatewayId, total: this.clients.size },
+      { clientId, tenantId, plantId, plcId, gatewayId, total: this.clients.size },
       'WebSocket client connected'
     );
 
@@ -98,13 +101,19 @@ class ConnectionManager {
     
     for (const [clientId, client] of this.clients.entries()) {
       // Check if client is interested in this message
-      const interestedInTenant = !client.tenant || client.tenant === message.tenant || client.tenant === '*';
-      const interestedInPlant = !client.plant || client.plant === message.plant || client.plant === '*';
-      const interestedInPlc =
-        !client.plcThingName || client.plcThingName === message.plcThingName || client.plcThingName === '*';
+      const interestedInTenant = !client.tenantId || client.tenantId === message.tenantId || client.tenantId === '*';
+      const allowedByPlantAccess =
+        !client.allowedPlantIds ||
+        client.allowedPlantIds.includes('*') ||
+        (!!message.plantId && client.allowedPlantIds.includes(message.plantId));
+      const interestedInPlant =
+        allowedByPlantAccess &&
+        (!client.plantId || client.plantId === message.plantId || client.plantId === '*');
+      const interestedInPlcId =
+        !client.plcId || client.plcId === message.plcId || client.plcId === '*';
       const interestedInGateway = !client.gatewayId || client.gatewayId === message.gatewayId || client.gatewayId === '*';
 
-      if (interestedInTenant && interestedInPlant && interestedInPlc && interestedInGateway &&
+      if (interestedInTenant && interestedInPlant && interestedInPlcId && interestedInGateway &&
           client.ws.readyState === WebSocket.OPEN) {
         try {
           client.ws.send(payload);

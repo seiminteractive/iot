@@ -247,6 +247,24 @@ const api = {
     const response = await apiClient.delete(`/api/persist-rules/${id}`, { params });
     return response.data;
   },
+
+  // Chart data - para widgets de gráficos
+  /**
+   * Obtiene datos formateados para gráficos
+   * @param {Object} params
+   * @param {string} params.metricId - ID de la métrica (requerido)
+   * @param {string} [params.plcId] - UUID del PLC (opcional)
+   * @param {string} [params.source='aggregated'] - 'raw' | 'aggregated'
+   * @param {string} [params.from] - Fecha inicio ISO string
+   * @param {string} [params.to] - Fecha fin ISO string
+   * @param {string} [params.groupBy='hour'] - 'minute' | 'hour' | 'day' | 'week' | 'month'
+   * @param {string} [params.aggregate='avg'] - 'avg' | 'sum' | 'min' | 'max' | 'last' | 'count'
+   * @param {number} [params.limit=100] - Máximo de puntos de datos
+   */
+  async getChartData(params = {}) {
+    const response = await apiClient.get('/api/telemetry/chart-data', { params });
+    return response.data;
+  },
 };
 
 export default api;

@@ -62,20 +62,25 @@
         <div class="form-field">
           <label>Modo de guardado *</label>
           <select v-model="form.mode" required>
-            <option value="none">No guardar</option>
             <option value="raw">Raw (cada evento)</option>
-            <option value="hourly">Hourly (agregado por hora)</option>
-            <option value="both">Both (Raw + Hourly)</option>
+            <option value="interval">Por intervalo (cada X minutos)</option>
           </select>
           <span class="helper">
-            <template v-if="form.mode === 'none'">La métrica no se guardará</template>
-            <template v-else-if="form.mode === 'raw'">Guarda cada evento individual</template>
-            <template v-else-if="form.mode === 'hourly'">Guarda 1 registro por hora (promedio, suma, etc.)</template>
-            <template v-else-if="form.mode === 'both'">Guarda raw + agregado por hora</template>
+            <template v-if="form.mode === 'raw'">Guarda cada evento individual</template>
+            <template v-else-if="form.mode === 'interval'">Guarda 1 registro cada {{ form.intervalMinutes }} minutos (agregado)</template>
           </span>
         </div>
 
-        <div class="form-field" v-if="showAggregate">
+        <div class="form-field" v-if="form.mode === 'interval'">
+          <label>Intervalo *</label>
+          <div class="input-with-suffix">
+            <input v-model.number="form.intervalMinutes" type="number" min="1" max="1440" />
+            <span class="suffix">minutos</span>
+          </div>
+          <span class="helper">Cada cuántos minutos se guarda un registro agregado</span>
+        </div>
+
+        <div class="form-field" v-if="form.mode === 'interval'">
           <label>Agregación</label>
           <select v-model="form.aggregate">
             <option value="last">Último valor (snapshot)</option>
@@ -84,7 +89,7 @@
             <option value="min">Mínimo</option>
             <option value="max">Máximo</option>
           </select>
-          <span class="helper">Cómo se calcula el valor horario</span>
+          <span class="helper">Cómo se calcula el valor del intervalo</span>
         </div>
 
         <div class="form-field">
@@ -144,9 +149,11 @@
             </div>
             <span class="list-item-subtitle">
               Planta: {{ rule.plant?.plantId || 'todas' }} · 
-              PLC: {{ rule.plc?.plcThingName || 'todos' }} · 
-              Agregado: {{ rule.aggregate || 'last' }} · 
-              Retención: {{ rule.retentionDays }}d
+              PLC: {{ rule.plc?.plcThingName || 'todos' }}
+              <template v-if="rule.mode === 'interval'">
+                · Intervalo: {{ rule.intervalMinutes }}min · Agregado: {{ rule.aggregate || 'last' }}
+              </template>
+              · Retención: {{ rule.retentionDays }}d
             </span>
           </div>
           <div class="list-item-actions">
@@ -193,15 +200,11 @@ const filterTenantId = ref('');
 // Form
 const form = ref({
   metricId: '',
-  mode: 'hourly',
+  mode: 'raw',
+  intervalMinutes: 60,
   aggregate: 'avg',
   retentionDays: 30,
 });
-
-// Computed
-const showAggregate = computed(() => 
-  form.value.mode === 'hourly' || form.value.mode === 'both'
-);
 
 const filteredPlants = computed(() => 
   plants.value.filter(p => p.tenantId === selectedTenantId.value)
@@ -212,14 +215,10 @@ const filteredPlcs = computed(() => plcs.value);
 
 const filteredRules = computed(() => {
   if (!filterTenantId.value) return rules.value;
-  const tenant = props.tenants.find(t => t.id === filterTenantId.value);
-  return rules.value.filter(r => r.tenant?.slug === tenant?.slug);
+  return rules.value.filter(r => r.tenant?.id === filterTenantId.value);
 });
 
-const selectedTenantSlug = computed(() => {
-  const tenant = props.tenants.find(t => t.id === selectedTenantId.value);
-  return tenant?.slug || '';
-});
+// (deprecated) tenant slug ya no se usa para params internos
 
 // API calls
 const loadRules = async () => {
@@ -279,7 +278,8 @@ const resetForm = () => {
   selectedPlcId.value = '';
   form.value = {
     metricId: '',
-    mode: 'hourly',
+    mode: 'raw',
+    intervalMinutes: 60,
     aggregate: 'avg',
     retentionDays: 30,
   };
@@ -315,14 +315,15 @@ const editRule = async (rule) => {
   
   form.value = {
     metricId: rule.metricId || '',
-    mode: rule.mode || 'hourly',
+    mode: rule.mode || 'raw',
+    intervalMinutes: rule.intervalMinutes || 60,
     aggregate: rule.aggregate || 'avg',
     retentionDays: rule.retentionDays || 30,
   };
 };
 
 const handleSubmit = async () => {
-  if (!selectedTenantSlug.value) {
+  if (!selectedTenantId.value) {
     error.value = 'Seleccioná un tenant antes de guardar.';
     return;
   }
@@ -337,12 +338,13 @@ const handleSubmit = async () => {
     plcId: selectedPlcId.value || null,
     metricId: form.value.metricId,
     mode: form.value.mode,
-    aggregate: showAggregate.value ? form.value.aggregate : null,
+    intervalMinutes: form.value.mode === 'interval' ? form.value.intervalMinutes : null,
+    aggregate: form.value.mode === 'interval' ? form.value.aggregate : null,
     retentionDays: form.value.retentionDays,
   };
 
   try {
-    const params = { tenant: selectedTenantSlug.value };
+    const params = { tenantId: selectedTenantId.value };
     if (editingId.value) {
       await api.updatePersistRule(editingId.value, payload, params);
     } else {
@@ -360,12 +362,12 @@ const handleSubmit = async () => {
 const deleteRule = async (rule) => {
   if (!confirm('¿Eliminar esta regla?')) return;
   try {
-    const tenantSlug = rule.tenant?.slug;
-    if (!tenantSlug) {
+    const tenantId = rule.tenant?.id;
+    if (!tenantId) {
       error.value = 'No se pudo determinar el tenant de la regla.';
       return;
     }
-    await api.deletePersistRule(rule.id, { tenant: tenantSlug });
+    await api.deletePersistRule(rule.id, { tenantId });
     await loadRules();
   } catch (err) {
     console.error(err);
@@ -683,24 +685,14 @@ onMounted(async () => {
   color: #86868b;
 }
 
-.badge.mode-none {
-  background: rgba(142, 142, 147, 0.2);
-  color: #8e8e93;
-}
-
 .badge.mode-raw {
   background: rgba(255, 149, 0, 0.2);
   color: #ff9500;
 }
 
-.badge.mode-hourly {
+.badge.mode-interval {
   background: rgba(52, 199, 89, 0.2);
   color: #34c759;
-}
-
-.badge.mode-both {
-  background: rgba(0, 122, 255, 0.2);
-  color: #007aff;
 }
 
 /* Empty State */

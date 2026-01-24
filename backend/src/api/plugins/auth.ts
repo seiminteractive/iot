@@ -3,6 +3,7 @@ import fp from 'fastify-plugin';
 import { verifyFirebaseToken } from '../../auth/firebase.js';
 import { config } from '../../config/env.js';
 import { logger } from '../../utils/logger.js';
+import { prisma } from '../../db/prisma.js';
 
 const authPlugin: FastifyPluginAsync = async (fastify) => {
   // Log ADMIN_EMAILS al iniciar para verificar que se cargó
@@ -56,6 +57,7 @@ const authPlugin: FastifyPluginAsync = async (fastify) => {
       }
 
       // Para usuarios normales, requerir claims de Firebase
+      // IMPORTANT: tenantId en claims debe ser UUID del tenant (no slug).
       const tenantId = decoded.tenantId as string | undefined;
       const role = decoded.role as string | undefined;
       const plantAccess = (decoded.plantAccess as string[] | undefined) || [];
@@ -63,6 +65,11 @@ const authPlugin: FastifyPluginAsync = async (fastify) => {
       if (!tenantId || !role) {
         logger.warn({ userEmail, tenantId, role }, 'User missing tenant or role');
         return reply.code(403).send({ error: 'Missing tenant or role. Contact admin.' });
+      }
+      const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(tenantId);
+      if (!isUUID) {
+        logger.warn({ userEmail, tenantId }, 'Invalid tenantId format in token (expected UUID)');
+        return reply.code(403).send({ error: 'Invalid tenantId in token. Recreate user claims.' });
       }
 
       request.user = {

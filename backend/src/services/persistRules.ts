@@ -4,10 +4,18 @@ import { config } from '../config/env.js';
 
 export interface PersistDecision {
   mode: PersistMode;
+  intervalMinutes?: number; // Solo para mode=interval
   aggregate?: PersistAggregate;
   retentionDays: number;
   storeRaw: boolean;
-  storeHourly: boolean;
+  storeAggregated: boolean;
+}
+
+export interface ResolvedRule {
+  mode: PersistMode;
+  intervalMinutes?: number;
+  aggregate?: PersistAggregate;
+  retentionDays: number;
 }
 
 export async function resolvePersistRule(
@@ -16,7 +24,7 @@ export async function resolvePersistRule(
   gatewayId: string,
   plcId: string,
   metricId: string
-): Promise<{ mode: PersistMode; aggregate?: PersistAggregate; retentionDays: number } | null> {
+): Promise<ResolvedRule | null> {
   const rules = await prisma.persistRule.findMany({
     where: {
       tenantId,
@@ -49,19 +57,30 @@ export async function resolvePersistRule(
 
   return {
     mode: selected.mode,
+    intervalMinutes: selected.intervalMinutes ?? undefined,
     aggregate: selected.aggregate ?? undefined,
     retentionDays: selected.retentionDays,
   };
 }
 
-export function getPersistDecision(
-  rule: { mode: PersistMode; aggregate?: PersistAggregate; retentionDays: number } | null
-): PersistDecision {
-  const mode = rule?.mode ?? (config.PERSIST_DEFAULT_MODE as PersistMode);
-  const aggregate = rule?.aggregate ?? (mode === 'hourly' || mode === 'both' ? 'last' : undefined);
+export function getPersistDecision(rule: ResolvedRule | null): PersistDecision {
+  // Default: raw si no hay regla
+  const mode = rule?.mode ?? (config.PERSIST_DEFAULT_MODE as PersistMode) ?? 'raw';
+  const intervalMinutes = rule?.intervalMinutes;
+  const aggregate = rule?.aggregate ?? (mode === 'interval' ? 'last' : undefined);
   const retentionDays = rule?.retentionDays ?? 7;
-  const storeRaw = mode === 'raw' || mode === 'both';
-  const storeHourly = mode === 'hourly' || mode === 'both';
+  
+  // storeRaw solo si mode es 'raw'
+  const storeRaw = mode === 'raw';
+  // storeAggregated solo si mode es 'interval'
+  const storeAggregated = mode === 'interval';
 
-  return { mode, aggregate: aggregate as PersistAggregate | undefined, retentionDays, storeRaw, storeHourly };
+  return { 
+    mode, 
+    intervalMinutes,
+    aggregate: aggregate as PersistAggregate | undefined, 
+    retentionDays, 
+    storeRaw, 
+    storeAggregated 
+  };
 }

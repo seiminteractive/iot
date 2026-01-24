@@ -73,6 +73,7 @@
               <option value="status">Estado (luz)</option>
               <option value="gauge">Gauge (velocímetro)</option>
               <option value="counter">Contador (número)</option>
+              <option value="bar">Gráfico de barras</option>
             </select>
           </div>
 
@@ -105,6 +106,164 @@
               <option value="blue">Azul</option>
             </select>
           </div>
+
+          <!-- Bar Chart Configuration -->
+          <template v-if="widgetForm.type === 'bar'">
+            <!-- Sección: Fuente de datos -->
+            <div class="form-section-title">Fuente de datos</div>
+            
+            <div class="form-field">
+              <label>Origen de datos</label>
+              <select v-model="widgetForm.dataSource">
+                <option value="realtime">Tiempo real (WebSocket)</option>
+                <option value="aggregated">Histórico agregado (DB)</option>
+                <option value="raw">Histórico raw (DB)</option>
+              </select>
+            </div>
+
+            <!-- Configuración de datos históricos -->
+            <template v-if="widgetForm.dataSource !== 'realtime'">
+              <div class="form-section-title">Rango de tiempo</div>
+              
+              <div class="form-field">
+                <label>Tipo de rango</label>
+                <select v-model="widgetForm.timeRangeType">
+                  <option value="relative">Relativo (últimas X...)</option>
+                  <option value="absolute">Absoluto (desde/hasta)</option>
+                </select>
+              </div>
+
+              <template v-if="widgetForm.timeRangeType === 'relative'">
+                <div class="form-row">
+                  <div class="form-field">
+                    <label>Últimas</label>
+                    <input v-model.number="widgetForm.timeRangeValue" type="number" min="1" placeholder="24" />
+                  </div>
+                  <div class="form-field">
+                    <label>Unidad</label>
+                    <select v-model="widgetForm.timeRangeUnit">
+                      <option value="minutes">Minutos</option>
+                      <option value="hours">Horas</option>
+                      <option value="days">Días</option>
+                      <option value="weeks">Semanas</option>
+                      <option value="months">Meses</option>
+                    </select>
+                  </div>
+                </div>
+              </template>
+
+              <template v-if="widgetForm.timeRangeType === 'absolute'">
+                <div class="form-field">
+                  <label>Desde</label>
+                  <input v-model="widgetForm.absoluteFrom" type="datetime-local" />
+                </div>
+                <div class="form-field">
+                  <label>Hasta</label>
+                  <input v-model="widgetForm.absoluteTo" type="datetime-local" />
+                </div>
+              </template>
+
+              <div class="form-section-title">Agrupación</div>
+              
+              <div class="form-field">
+                <label>Agrupar por</label>
+                <select v-model="widgetForm.groupBy">
+                  <option value="minute">Minuto</option>
+                  <option value="hour">Hora</option>
+                  <option value="day">Día</option>
+                  <option value="week">Semana</option>
+                  <option value="month">Mes</option>
+                </select>
+              </div>
+
+              <div class="form-field">
+                <label>Función de agregación</label>
+                <select v-model="widgetForm.aggregate">
+                  <option value="avg">Promedio</option>
+                  <option value="sum">Suma</option>
+                  <option value="min">Mínimo</option>
+                  <option value="max">Máximo</option>
+                  <option value="last">Último valor</option>
+                  <option value="count">Conteo</option>
+                </select>
+              </div>
+
+            </template>
+
+            <!-- Visualización -->
+            <div class="form-section-title">Visualización</div>
+
+            <div class="form-field">
+              <label>Unidad</label>
+              <input v-model="widgetForm.unit" placeholder="ej: kWh, %, unidades" />
+            </div>
+            
+            <div class="form-field">
+              <label>Color de barras</label>
+              <select v-model="widgetForm.barColor">
+                <option value="purple">Violeta</option>
+                <option value="blue">Azul</option>
+                <option value="green">Verde</option>
+                <option value="orange">Naranja</option>
+                <option value="red">Rojo</option>
+                <option value="cyan">Cyan</option>
+                <option value="pink">Rosa</option>
+                <option value="yellow">Amarillo</option>
+              </select>
+            </div>
+
+            <div class="form-field">
+              <label>Orientación</label>
+              <select v-model="widgetForm.barHorizontal">
+                <option :value="false">Vertical</option>
+                <option :value="true">Horizontal</option>
+              </select>
+            </div>
+
+            <div class="form-field">
+              <label>Nombre eje X</label>
+              <input v-model="widgetForm.barXAxisName" placeholder="ej: Tiempo, Categoría" />
+            </div>
+
+            <div class="form-field">
+              <label>Nombre eje Y</label>
+              <input v-model="widgetForm.barYAxisName" placeholder="ej: Valores, Cantidad" />
+            </div>
+
+            <div class="form-field">
+              <label>Valor mínimo eje Y</label>
+              <input v-model.number="widgetForm.barYMin" type="number" placeholder="Auto" />
+            </div>
+
+            <div class="form-field">
+              <label>Valor máximo eje Y</label>
+              <input v-model.number="widgetForm.barYMax" type="number" placeholder="Auto" />
+            </div>
+
+            <div class="form-field toggle-field">
+              <label class="toggle-label">
+                <input type="checkbox" v-model="widgetForm.barShowLabels" class="toggle-input" />
+                <span class="toggle-switch"></span>
+                <span class="toggle-text">Mostrar valores sobre barras</span>
+              </label>
+            </div>
+
+            <div class="form-field toggle-field">
+              <label class="toggle-label">
+                <input type="checkbox" v-model="widgetForm.barShowGrid" class="toggle-input" />
+                <span class="toggle-switch"></span>
+                <span class="toggle-text">Mostrar líneas de grilla</span>
+              </label>
+            </div>
+
+            <div class="form-field toggle-field">
+              <label class="toggle-label">
+                <input type="checkbox" v-model="widgetForm.barShowTooltip" class="toggle-input" />
+                <span class="toggle-switch"></span>
+                <span class="toggle-text">Mostrar tooltip al hover</span>
+              </label>
+            </div>
+          </template>
 
           <div class="panel-actions">
             <button class="btn primary" type="submit">{{ editingWidgetId ? 'Guardar' : 'Crear' }}</button>
@@ -152,6 +311,7 @@
                   :max="widget.configJson?.max || widget.config_json?.max"
                   :unit="widget.unit"
                   :color="(widget.configJson?.color || widget.config_json?.color)"
+                  :config="widget.configJson || widget.config_json"
                 />
 
                 <div v-else class="widget-unknown">{{ widget.metricId || widget.metric_id }}</div>
@@ -174,6 +334,7 @@ import api from '../services/api';
 import GaugeChart from '../components/GaugeChart.vue';
 import StatusLight from '../components/StatusLight.vue';
 import NumericCounter from '../components/NumericCounter.vue';
+import BarChartWidget from '../components/BarChartWidget.vue';
 
 const props = defineProps({
   plc: { type: Object, required: true }, // expects { id, plcThingName?, name? }
@@ -239,6 +400,7 @@ const resolveComponent = (type) => {
   if (type === 'gauge') return GaugeChart;
   if (type === 'status') return StatusLight;
   if (type === 'counter') return NumericCounter;
+  if (type === 'bar') return BarChartWidget;
   return null;
 };
 
@@ -252,6 +414,11 @@ const defaultLayoutForType = (type, index = 0) => {
     // Counter puede ser más angosto
     const w = 2, h = 3;
     return { x: (index * w) % gridCols, y: Math.floor((index * w) / gridCols) * h, w, h, minW: 2, minH: 2 };
+  }
+  if (type === 'bar') {
+    // Bar chart necesita más espacio
+    const w = 6, h = 4;
+    return { x: (index * w) % gridCols, y: Math.floor((index * w) / gridCols) * h, w, h, minW: 4, minH: 3 };
   }
   const w = 4, h = 3;
   return { x: (index * w) % gridCols, y: Math.floor((index * w) / gridCols) * h, w, h, minW: 3, minH: 2 };
@@ -360,6 +527,26 @@ const widgetForm = ref({
   gaugeMax: 100,
   statusColor: 'green',
   isVisible: true,
+  // Bar chart - data source
+  dataSource: 'aggregated',
+  timeRangeType: 'relative',
+  timeRangeValue: 24,
+  timeRangeUnit: 'hours',
+  groupBy: 'hour',
+  aggregate: 'avg',
+  // Bar chart - visualization
+  barColor: 'blue',
+  barHorizontal: false,
+  barXAxisName: '',
+  barYAxisName: '',
+  barYMin: null,
+  barYMax: null,
+  barShowLabels: false,
+  barShowGrid: true,
+  barShowTooltip: true,
+  // Rango absoluto
+  absoluteFrom: '',
+  absoluteTo: '',
 });
 
 const selectWidget = (w) => {
@@ -367,6 +554,11 @@ const selectWidget = (w) => {
   editingWidgetId.value = w.id;
   widgetFormVisible.value = true;
 
+  const cfg = w.configJson || w.config_json || {};
+  
+  const timeRange = cfg.timeRange || {};
+  const autoRefresh = cfg.autoRefresh || {};
+  
   widgetForm.value = {
     widgetKey: w.widgetKey || w.widget_key || '',
     type: w.type,
@@ -375,9 +567,29 @@ const selectWidget = (w) => {
     unit: w.unit || '',
     dataType: w.dataType || w.data_type || '',
     sortOrder: typeof w.sortOrder === 'number' ? w.sortOrder : (w.sort_order || 0),
-    gaugeMax: w.configJson?.max || w.config_json?.max || 100,
-    statusColor: w.configJson?.color || w.config_json?.color || 'green',
+    gaugeMax: cfg.max || 100,
+    statusColor: cfg.color || 'green',
     isVisible: w.isVisible !== false && w.is_visible !== false,
+    // Bar chart - data source
+    dataSource: cfg.dataSource || 'aggregated',
+    timeRangeType: timeRange.type || 'relative',
+    timeRangeValue: timeRange.relative?.value || 24,
+    timeRangeUnit: timeRange.relative?.unit || 'hours',
+    groupBy: cfg.groupBy || 'hour',
+    aggregate: cfg.aggregate || 'avg',
+    // Bar chart - visualization
+    barColor: cfg.color || 'blue',
+    barHorizontal: cfg.horizontal || false,
+    barXAxisName: cfg.xAxisName || '',
+    barYAxisName: cfg.yAxisName || '',
+    barYMin: cfg.yAxisMin ?? null,
+    barYMax: cfg.yAxisMax ?? null,
+    barShowLabels: cfg.showBarLabels || false,
+    barShowGrid: cfg.showGridLines !== false,
+    barShowTooltip: cfg.showTooltip !== false,
+    // Rango absoluto
+    absoluteFrom: timeRange.absolute?.from || '',
+    absoluteTo: timeRange.absolute?.to || '',
   };
 };
 
@@ -395,6 +607,26 @@ const startCreateWidget = () => {
     gaugeMax: 100,
     statusColor: 'green',
     isVisible: true,
+    // Bar chart - data source defaults
+    dataSource: 'aggregated',
+    timeRangeType: 'relative',
+    timeRangeValue: 24,
+    timeRangeUnit: 'hours',
+    groupBy: 'hour',
+    aggregate: 'avg',
+    // Bar chart - visualization defaults
+    barColor: 'blue',
+    barHorizontal: false,
+    barXAxisName: '',
+    barYAxisName: '',
+    barYMin: null,
+    barYMax: null,
+    barShowLabels: false,
+    barShowGrid: true,
+    barShowTooltip: true,
+    // Rango absoluto
+    absoluteFrom: '',
+    absoluteTo: '',
   };
 };
 
@@ -406,6 +638,36 @@ const cancelWidgetForm = () => {
 const buildConfigJson = () => {
   if (widgetForm.value.type === 'status') return { color: widgetForm.value.statusColor || 'green' };
   if (widgetForm.value.type === 'gauge') return { max: Number(widgetForm.value.gaugeMax) || 100 };
+  if (widgetForm.value.type === 'bar') {
+    const timeRange = {
+      type: widgetForm.value.timeRangeType || 'relative',
+      relative: {
+        value: widgetForm.value.timeRangeValue || 24,
+        unit: widgetForm.value.timeRangeUnit || 'hours',
+      },
+      absolute: {
+        from: widgetForm.value.absoluteFrom || null,
+        to: widgetForm.value.absoluteTo || null,
+      },
+    };
+    return {
+      // Data source configuration
+      dataSource: widgetForm.value.dataSource || 'aggregated',
+      timeRange,
+      groupBy: widgetForm.value.groupBy || 'hour',
+      aggregate: widgetForm.value.aggregate || 'avg',
+      // Visualization configuration
+      color: widgetForm.value.barColor || 'blue',
+      horizontal: widgetForm.value.barHorizontal || false,
+      xAxisName: widgetForm.value.barXAxisName || '',
+      yAxisName: widgetForm.value.barYAxisName || '',
+      yAxisMin: widgetForm.value.barYMin ?? undefined,
+      yAxisMax: widgetForm.value.barYMax ?? undefined,
+      showBarLabels: widgetForm.value.barShowLabels || false,
+      showGridLines: widgetForm.value.barShowGrid !== false,
+      showTooltip: widgetForm.value.barShowTooltip !== false,
+    };
+  }
   return {};
 };
 
@@ -504,6 +766,14 @@ const sampleValue = (widget) => {
   if (widget.type === 'status') return true;
   if (widget.type === 'gauge') return Number(widget.configJson?.max || widget.config_json?.max || 100) * 0.6;
   if (widget.type === 'counter') return 42;
+  if (widget.type === 'bar') {
+    const cfg = widget.configJson || widget.config_json || {};
+    const categories = cfg.categories || ['Lun', 'Mar', 'Mié', 'Jue', 'Vie'];
+    return categories.map((name, i) => ({
+      name,
+      value: Math.round(20 + Math.random() * 80),
+    }));
+  }
   return 0;
 };
 </script>
@@ -619,6 +889,28 @@ const sampleValue = (widget) => {
   font-size: 0.75rem;
   color: #888;
   font-weight: 500;
+}
+
+.form-section-title {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #f5f5f7;
+  margin-top: 0.5rem;
+  margin-bottom: 0.25rem;
+  padding-top: 0.5rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.form-section-title:first-of-type {
+  border-top: none;
+  margin-top: 0;
+  padding-top: 0;
+}
+
+.form-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
 }
 
 .panel-actions {
@@ -837,6 +1129,59 @@ const sampleValue = (widget) => {
   .builder-panel {
     width: 320px;
   }
+}
+
+/* Toggle field styles */
+.toggle-field {
+  padding: 8px 0;
+}
+
+.toggle-label {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.toggle-input {
+  display: none;
+}
+
+.toggle-switch {
+  position: relative;
+  width: 40px;
+  height: 22px;
+  background: #333;
+  border-radius: 11px;
+  transition: background 0.2s ease;
+  flex-shrink: 0;
+}
+
+.toggle-switch::after {
+  content: '';
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 16px;
+  height: 16px;
+  background: #888;
+  border-radius: 50%;
+  transition: all 0.2s ease;
+}
+
+.toggle-input:checked + .toggle-switch {
+  background: #10b981;
+}
+
+.toggle-input:checked + .toggle-switch::after {
+  left: 21px;
+  background: #fff;
+}
+
+.toggle-text {
+  font-size: 0.85rem;
+  color: #ccc;
 }
 </style>
 

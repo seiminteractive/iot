@@ -2,6 +2,7 @@ import { FastifyPluginAsync } from 'fastify';
 import { prisma } from '../../db/prisma.js';
 import { requireInternal } from '../utils/authz.js';
 import { getFirebaseAuth } from '../../auth/firebase.js';
+import { config } from '../../config/env.js';
 
 const adminRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.get('/admin/access', async (request, reply) => {
@@ -324,20 +325,56 @@ const adminRoutes: FastifyPluginAsync = async (fastify) => {
   });
 
   // Users (Firebase)
+  function normalizePlantAccess(input: unknown): string[] {
+    if (input === undefined || input === null) return [];
+
+    if (typeof input === 'string') {
+      const t = input.trim();
+      if (t === '' || t === '*') return [];
+      // Fallback (legacy UI): allow comma-separated input
+      const parts = t
+        .split(',')
+        .map((p) => p.trim())
+        .filter(Boolean);
+      return parts.includes('*') ? [] : parts;
+    }
+
+    if (Array.isArray(input)) {
+      const parts = input
+        .filter((x): x is string => typeof x === 'string')
+        .map((s) => s.trim())
+        .filter(Boolean);
+      return parts.includes('*') ? [] : parts;
+    }
+
+    return [];
+  }
+
   fastify.get('/admin/users', async (request, reply) => {
     if (!requireInternal(request)) {
       return reply.code(403).send({ error: 'Forbidden' });
     }
     const auth = getFirebaseAuth();
     const result = await auth.listUsers(1000);
-    const users = result.users.map((user) => ({
-      uid: user.uid,
-      email: user.email,
-      disabled: user.disabled,
-      tenantId: (user.customClaims?.tenantId as string | undefined) || null,
-      role: (user.customClaims?.role as string | undefined) || null,
-      plantAccess: (user.customClaims?.plantAccess as string[] | undefined) || [],
-    }));
+    
+    // Parse admin emails from env
+    const adminEmails = config.ADMIN_EMAILS
+      ? config.ADMIN_EMAILS.split(',').map(e => e.trim().toLowerCase())
+      : [];
+    
+    const users = result.users
+      .filter((user) => {
+        // Excluir usuarios que están en ADMIN_EMAILS
+        return !adminEmails.includes(user.email?.toLowerCase() || '');
+      })
+      .map((user) => ({
+        uid: user.uid,
+        email: user.email,
+        disabled: user.disabled,
+        tenantId: (user.customClaims?.tenantId as string | undefined) || null,
+        role: (user.customClaims?.role as string | undefined) || null,
+        plantAccess: (user.customClaims?.plantAccess as string[] | undefined) || [],
+      }));
     return reply.send(users);
   });
 
@@ -350,13 +387,13 @@ const adminRoutes: FastifyPluginAsync = async (fastify) => {
       password?: string;
       tenantId?: string;
       role?: string;
-      plantAccess?: string[];
+      plantAccess?: unknown;
     };
     if (!body?.email || !body?.password || !body?.tenantId || !body?.role) {
       return reply.code(400).send({ error: 'Missing email, password, tenantId or role' });
     }
     const auth = getFirebaseAuth();
-    const tenant = await prisma.tenant.findUnique({ where: { slug: body.tenantId } });
+    const tenant = await prisma.tenant.findUnique({ where: { id: body.tenantId } });
     if (!tenant) {
       return reply.code(404).send({ error: 'Tenant not found' });
     }
@@ -365,9 +402,9 @@ const adminRoutes: FastifyPluginAsync = async (fastify) => {
       password: body.password,
     });
     await auth.setCustomUserClaims(userRecord.uid, {
-      tenantId: body.tenantId,
+      tenantId: tenant.id,
       role: body.role,
-      plantAccess: body.plantAccess || [],
+      plantAccess: normalizePlantAccess(body.plantAccess),
     });
     return reply.send({ uid: userRecord.uid, email: userRecord.email });
   });
@@ -380,7 +417,7 @@ const adminRoutes: FastifyPluginAsync = async (fastify) => {
     const body = request.body as {
       tenantId?: string;
       role?: string;
-      plantAccess?: string[];
+      plantAccess?: unknown;
       disabled?: boolean;
     };
     const auth = getFirebaseAuth();
@@ -391,9 +428,18 @@ const adminRoutes: FastifyPluginAsync = async (fastify) => {
     const claims: Record<string, any> = {
       ...(userRecord.customClaims || {}),
     };
-    if (body.tenantId) claims.tenantId = body.tenantId;
+    if (body.tenantId) {
+      const tenant = await prisma.tenant.findUnique({ where: { id: body.tenantId } });
+      if (!tenant) {
+        return reply.code(404).send({ error: 'Tenant not found' });
+      }
+      claims.tenantId = tenant.id;
+    }
     if (body.role) claims.role = body.role;
-    if (body.plantAccess) claims.plantAccess = body.plantAccess;
+    // Allow explicit clearing ([]): send plantAccess in payload to update it even if empty
+    if ('plantAccess' in body) {
+      claims.plantAccess = normalizePlantAccess(body.plantAccess);
+    }
     if (Object.keys(claims).length > 0) {
       await auth.setCustomUserClaims(uid, claims);
     }

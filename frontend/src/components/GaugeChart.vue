@@ -155,4 +155,14 @@ export default {
   color: #888888;
   font-weight: 500;
 }
+
+@media (max-width: 640px) {
+  .gauge-container {
+    padding: 1rem;
+  }
+  
+  .gauge-title {
+    font-size: 0.95rem;
+  }
+}
 </style>

@@ -1,9 +1,21 @@
 import { prisma } from '../db/prisma.js';
 import { PersistAggregate } from '@prisma/client';
+import { broadcastAggregatedUpdate } from '../ws/broadcast.js';
 
-export function getHourBucket(timestamp: number): Date {
+/**
+ * Calcula el bucket (inicio del intervalo) para un timestamp dado
+ * @param timestamp - Timestamp en milisegundos
+ * @param intervalMinutes - Duración del intervalo en minutos
+ * @returns Date del inicio del bucket
+ */
+export function getBucket(timestamp: number, intervalMinutes: number): Date {
   const date = new Date(timestamp);
-  date.setUTCMinutes(0, 0, 0);
+  const totalMinutes = date.getUTCHours() * 60 + date.getUTCMinutes();
+  const bucketMinutes = Math.floor(totalMinutes / intervalMinutes) * intervalMinutes;
+  const bucketHours = Math.floor(bucketMinutes / 60);
+  const bucketMins = bucketMinutes % 60;
+  
+  date.setUTCHours(bucketHours, bucketMins, 0, 0);
   return date;
 }
 
@@ -11,7 +23,7 @@ function isNumeric(value: unknown): value is number {
   return typeof value === 'number' && Number.isFinite(value);
 }
 
-export async function upsertTelemetryHourly(params: {
+export async function upsertTelemetryAggregated(params: {
   tenantId: string;
   plantId: string;
   gatewayId: string;
@@ -19,6 +31,7 @@ export async function upsertTelemetryHourly(params: {
   metricId: string;
   timestamp: number;
   value: unknown;
+  intervalMinutes: number;
   aggregate?: PersistAggregate;
 }): Promise<void> {
   const {
@@ -29,35 +42,39 @@ export async function upsertTelemetryHourly(params: {
     metricId,
     timestamp,
     value,
+    intervalMinutes,
     aggregate,
   } = params;
-  void aggregate;
-  const hour = getHourBucket(timestamp);
+  void aggregate; // Se usa al consultar, no al guardar
+  
+  const bucket = getBucket(timestamp, intervalMinutes);
   const numericValue = isNumeric(value) ? value : null;
 
   await prisma.$transaction(async (tx) => {
-    const existing = await tx.telemetryHourly.findUnique({
+    const existing = await tx.telemetryAggregated.findUnique({
       where: {
-        tenantId_plantId_gatewayId_plcId_metricId_hour: {
+        tenantId_plantId_gatewayId_plcId_metricId_bucket_intervalMinutes: {
           tenantId,
           plantId,
           gatewayId,
           plcId,
           metricId,
-          hour,
+          bucket,
+          intervalMinutes,
         },
       },
     });
 
     if (!existing) {
-      await tx.telemetryHourly.create({
+      await tx.telemetryAggregated.create({
         data: {
           tenantId,
           plantId,
           gatewayId,
           plcId,
           metricId,
-          hour,
+          bucket,
+          intervalMinutes,
           count: 1,
           sum: numericValue ?? undefined,
           min: numericValue ?? undefined,
@@ -80,7 +97,7 @@ export async function upsertTelemetryHourly(params: {
       ? Math.max(existing.max ?? numericValue, numericValue)
       : existing.max ?? undefined;
 
-    await tx.telemetryHourly.update({
+    await tx.telemetryAggregated.update({
       where: { id: existing.id },
       data: {
         count: nextCount,
@@ -91,5 +108,15 @@ export async function upsertTelemetryHourly(params: {
         lastTs: new Date(timestamp),
       },
     });
+  });
+
+  // Notificar a los clientes que hay nuevos datos agregados
+  await broadcastAggregatedUpdate({
+    tenantId,
+    plantId,
+    plcId,
+    metricId,
+    bucket: bucket.toISOString(),
+    intervalMinutes,
   });
 }

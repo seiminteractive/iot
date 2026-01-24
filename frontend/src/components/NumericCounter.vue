@@ -138,4 +138,14 @@ export default {
   border-color: #f59e0b;
   box-shadow: 0 0 15px rgba(251, 191, 36, 0.2);
 }
+
+@media (max-width: 640px) {
+  .counter-value {
+    font-size: 2rem;
+  }
+  
+  .counter-label {
+    font-size: 0.7rem;
+  }
+}
 </style>

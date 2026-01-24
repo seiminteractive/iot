@@ -19,13 +19,8 @@ const telemetryRoutes: FastifyPluginAsync = async (fastify) => {
     if (!tenant) {
       return reply.code(403).send({ error: 'Invalid tenant' });
     }
-    const plants = allowedPlants(request);
-
-    if (!plants.includes('*') && !plants.includes(plant)) {
-      return reply.code(403).send({ error: 'Forbidden' });
-    }
-
-    // Find PLC
+    
+    // Resolve plantId string to UUID
     const plantRecord = await prisma.plant.findFirst({
       where: { tenantId: tenant.id, plantId: plant },
       select: { id: true },
@@ -33,6 +28,12 @@ const telemetryRoutes: FastifyPluginAsync = async (fastify) => {
 
     if (!plantRecord) {
       return reply.code(404).send({ error: 'Plant not found' });
+    }
+    
+    const plants = allowedPlants(request);
+
+    if (!plants.includes('*') && !plants.includes(plantRecord.id)) {
+      return reply.code(403).send({ error: 'Forbidden' });
     }
 
     const plc = await prisma.plc.findUnique({
@@ -92,7 +93,7 @@ const telemetryRoutes: FastifyPluginAsync = async (fastify) => {
     const telemetry = await prisma.telemetryEvent.findMany({
       where: {
         tenantId: tenant.id,
-        ...(plants.includes('*') ? {} : { plant: { plantId: { in: plants } } }),
+        ...(plants.includes('*') ? {} : { plantId: { in: plants } }),
       },
       orderBy: {
         ts: 'desc',
@@ -116,7 +117,7 @@ const telemetryRoutes: FastifyPluginAsync = async (fastify) => {
     return reply.send(telemetry);
   });
 
-  // Get hourly aggregated telemetry
+  // Get aggregated telemetry (by interval)
   fastify.get<{
     Querystring: {
       plant?: string;
@@ -127,7 +128,7 @@ const telemetryRoutes: FastifyPluginAsync = async (fastify) => {
       to?: string;
       limit?: string;
     };
-  }>('/telemetry/hourly', async (request, reply) => {
+  }>('/telemetry/aggregated', async (request, reply) => {
     if (!requireRole(request, 'viewer')) {
       return reply.code(403).send({ error: 'Forbidden' });
     }
@@ -154,13 +155,13 @@ const telemetryRoutes: FastifyPluginAsync = async (fastify) => {
     const where: any = {
       tenantId: tenant.id,
       ...(metricId ? { metricId } : {}),
-      ...(plants.includes('*') ? {} : { plant: { plantId: { in: plants } } }),
+      ...(plants.includes('*') ? {} : { plantId: { in: plants } }),
     };
 
     if (from || to) {
-      where.hour = {};
-      if (from) where.hour.gte = new Date(from);
-      if (to) where.hour.lte = new Date(to);
+      where.bucket = {};
+      if (from) where.bucket.gte = new Date(from);
+      if (to) where.bucket.lte = new Date(to);
     }
 
     if (plant) {
@@ -203,9 +204,9 @@ const telemetryRoutes: FastifyPluginAsync = async (fastify) => {
       where.gatewayId = gatewayRecord.id;
     }
 
-    const results = await prisma.telemetryHourly.findMany({
+    const results = await prisma.telemetryAggregated.findMany({
       where,
-      orderBy: { hour: 'desc' },
+      orderBy: { bucket: 'desc' },
       take: parseInt(limit, 10),
     });
 

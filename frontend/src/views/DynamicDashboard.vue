@@ -59,12 +59,12 @@
           class="widget-card"
           :class="{
             'no-padding': widget.type === 'status',
-            'inner-only': widget.type === 'gauge' || widget.type === 'counter',
+            'inner-only': widget.type === 'gauge' || widget.type === 'counter' || widget.type === 'bar',
           }"
           :style="gridStyle(widget, index)"
         >
-          <!-- Gauge/Counter ya dibujan su propio recuadro + título -->
-          <div v-if="widget.type !== 'status' && widget.type !== 'gauge' && widget.type !== 'counter'" class="widget-header">
+          <!-- Gauge/Counter/Bar ya dibujan su propio recuadro + título -->
+          <div v-if="widget.type !== 'status' && widget.type !== 'gauge' && widget.type !== 'counter' && widget.type !== 'bar'" class="widget-header">
             <span>{{ widget.label }}</span>
             <span class="muted">{{ widget.unit || '' }}</span>
           </div>
@@ -77,6 +77,9 @@
             :max="widget.config_json?.max"
             :unit="widget.unit"
             :color="widget.config_json?.color"
+            :config="widget.config_json"
+            :metricId="widget.metric_id"
+            :plcId="plc?.id"
           />
 
           <div v-else class="widget-unknown">
@@ -93,6 +96,7 @@ import { computed } from 'vue';
 import GaugeChart from '../components/GaugeChart.vue';
 import StatusLight from '../components/StatusLight.vue';
 import NumericCounter from '../components/NumericCounter.vue';
+import BarChartWidget from '../components/BarChartWidget.vue';
 
 const props = defineProps({
   dashboard: Object,
@@ -121,6 +125,7 @@ const resolveComponent = (type) => {
   if (type === 'gauge') return GaugeChart;
   if (type === 'status') return StatusLight;
   if (type === 'counter') return NumericCounter;
+  if (type === 'bar') return BarChartWidget;
   return null;
 };
 
@@ -146,6 +151,18 @@ const resolveValue = (widget) => {
     if (typeof raw === 'number') return raw > 0;
     return false;
   }
+  if (widget.type === 'bar') {
+    // El valor puede venir como array de objetos {name, value} o como array de números
+    if (Array.isArray(raw)) return raw;
+    // Si es un objeto con categories y values
+    if (raw && typeof raw === 'object' && !Array.isArray(raw)) return raw;
+    // Si es un número, lo convertimos a un array con una barra
+    if (typeof raw === 'number') return [{ name: widget.label || 'Valor', value: raw }];
+    // Si no hay datos, devolvemos datos de ejemplo
+    const cfg = widget.config_json || {};
+    const categories = cfg.categories || ['Item 1', 'Item 2', 'Item 3'];
+    return categories.map((name) => ({ name, value: 0 }));
+  }
   return raw ?? '-';
 };
 
@@ -153,8 +170,15 @@ const gridStyle = (widget, index) => {
   const layout = widget.layout_json || widget.layoutJson || {};
   
   // Default sizes based on widget type
-  const defaultW = widget.type === 'status' ? 2 : 4;
-  const defaultH = widget.type === 'status' ? 2 : 3;
+  let defaultW = 4;
+  let defaultH = 3;
+  if (widget.type === 'status') {
+    defaultW = 2;
+    defaultH = 2;
+  } else if (widget.type === 'bar') {
+    defaultW = 6;
+    defaultH = 4;
+  }
   
   const w = Number.isFinite(layout.w) ? layout.w : defaultW;
   const h = Number.isFinite(layout.h) ? layout.h : defaultH;
@@ -217,6 +241,8 @@ const gridStyle = (widget, index) => {
   height: 100%;
   display: flex;
   flex-direction: column;
+  min-width: 0; /* Permite que el grid item se encoja */
+  overflow: hidden; /* Contiene el overflow de los hijos */
 }
 
 .widget-card.no-padding {
@@ -311,5 +337,93 @@ const gridStyle = (widget, index) => {
   margin: 0;
   max-width: 380px;
   line-height: 1.5;
+}
+
+/* ===== RESPONSIVE ===== */
+
+/* Tablet */
+@media (max-width: 1024px) {
+  .widgets-grid {
+    grid-template-columns: repeat(6, 1fr);
+    grid-auto-rows: 80px;
+  }
+  
+  .widget-card {
+    grid-column: span 3 !important;
+    grid-row: span 3 !important;
+  }
+  
+  .widget-card.no-padding {
+    grid-column: span 2 !important;
+    grid-row: span 2 !important;
+  }
+}
+
+/* Mobile */
+@media (max-width: 640px) {
+  .dashboard-container {
+    padding: 1rem;
+    padding-bottom: 120px;
+    overflow-x: hidden; /* Evita scroll horizontal en toda la página */
+  }
+  
+  .dashboard-header {
+    margin-bottom: 1rem;
+  }
+  
+  .tenant-info {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.5rem;
+  }
+  
+  .tenant-icon {
+    width: 40px;
+    height: 40px;
+  }
+  
+  .tenant-info h1 {
+    font-size: 1.25rem;
+  }
+  
+  .widgets-grid {
+    grid-template-columns: 1fr;
+    grid-auto-rows: auto;
+    gap: 0.75rem;
+  }
+  
+  .widget-card {
+    grid-column: 1 / -1 !important;
+    grid-row: auto !important;
+    min-height: 180px;
+  }
+  
+  .widget-card.no-padding {
+    min-height: 100px;
+  }
+  
+  .empty-state {
+    min-height: 50vh;
+    padding: 2rem 1.5rem;
+  }
+  
+  .empty-state-icon {
+    width: 64px;
+    height: 64px;
+    border-radius: 16px;
+  }
+  
+  .empty-state-icon svg {
+    width: 32px;
+    height: 32px;
+  }
+  
+  .empty-state-title {
+    font-size: 1.25rem;
+  }
+  
+  .empty-state-subtitle {
+    font-size: 0.9rem;
+  }
 }
 </style>

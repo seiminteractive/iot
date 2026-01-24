@@ -20,13 +20,8 @@ const alarmsRoutes: FastifyPluginAsync = async (fastify) => {
     if (!tenant) {
       return reply.code(403).send({ error: 'Invalid tenant' });
     }
-    const plants = allowedPlants(request);
-
-    if (!plants.includes('*') && !plants.includes(plant)) {
-      return reply.code(403).send({ error: 'Forbidden' });
-    }
-
-    // Find PLC
+    
+    // Resolve plantId string to UUID
     const plantRecord = await prisma.plant.findFirst({
       where: { tenantId: tenant.id, plantId: plant },
       select: { id: true },
@@ -34,6 +29,12 @@ const alarmsRoutes: FastifyPluginAsync = async (fastify) => {
 
     if (!plantRecord) {
       return reply.code(404).send({ error: 'Plant not found' });
+    }
+    
+    const plants = allowedPlants(request);
+
+    if (!plants.includes('*') && !plants.includes(plantRecord.id)) {
+      return reply.code(403).send({ error: 'Forbidden' });
     }
 
     const plc = await prisma.plc.findUnique({
@@ -89,7 +90,7 @@ const alarmsRoutes: FastifyPluginAsync = async (fastify) => {
 
     const where: any = {
       tenantId: tenant.id,
-      ...(plants.includes('*') ? {} : { plant: { plantId: { in: plants } } }),
+      ...(plants.includes('*') ? {} : { plantId: { in: plants } }),
     };
 
     if (acknowledged !== undefined) {

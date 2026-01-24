@@ -5,7 +5,7 @@ import { parseTopic } from '../mqtt/parseTopic.js';
 import { NormalizedTelemetryMessage } from '../types/index.js';
 import { broadcastToClients } from '../ws/broadcast.js';
 import { getPersistDecision, resolvePersistRule } from './persistRules.js';
-import { upsertTelemetryHourly } from './hourlyAggregation.js';
+import { upsertTelemetryAggregated } from './hourlyAggregation.js';
 import { updatePLCState } from './plcStateTracker.js';
 
 interface MetricValue {
@@ -220,8 +220,8 @@ export async function ingestTelemetry(topic: string, rawPayload: any): Promise<v
         });
       }
 
-      if (decision.storeHourly) {
-        await upsertTelemetryHourly({
+      if (decision.storeAggregated && decision.intervalMinutes) {
+        await upsertTelemetryAggregated({
           tenantId: tenant.id,
           plantId: plant.id,
           gatewayId: gateway.id,
@@ -229,17 +229,18 @@ export async function ingestTelemetry(topic: string, rawPayload: any): Promise<v
           metricId,
           timestamp: metricTs,
           value: metricValue,
+          intervalMinutes: decision.intervalMinutes,
           aggregate: decision.aggregate,
         });
 
-        await prisma.telemetryHourly.deleteMany({
+        await prisma.telemetryAggregated.deleteMany({
           where: {
             tenantId: tenant.id,
             plantId: plant.id,
             gatewayId: gateway.id,
             plcId: plc.id,
             metricId,
-            hour: { lt: retentionCutoff },
+            bucket: { lt: retentionCutoff },
           },
         });
       }
@@ -273,12 +274,13 @@ export async function ingestTelemetry(topic: string, rawPayload: any): Promise<v
     });
 
     // Update PLC state tracker and emit state change events
+    // Usamos la hora actual del servidor (cuando llegó el mensaje), no el timestamp del PLC
     await updatePLCState(
       plc.id,
       normalized.plcThingName,
       tenant.id,
       plant.id,
-      new Date(normalized.timestamp)
+      new Date() // Hora del servidor cuando se recibe el mensaje
     );
 
     logger.info(
@@ -294,8 +296,10 @@ export async function ingestTelemetry(topic: string, rawPayload: any): Promise<v
     // Broadcast to WebSocket clients
     await broadcastToClients({
       type: 'telemetry',
-      tenant: normalized.tenant,
-      plant: normalized.plant,
+      // Internal routing fields
+      tenantId: tenant.id,
+      plantId: plant.id,
+      plcId: plc.id,
       plcThingName: normalized.plcThingName,
       gatewayId: normalized.gatewayId,
       ts: normalized.timestamp,

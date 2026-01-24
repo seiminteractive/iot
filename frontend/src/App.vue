@@ -209,7 +209,7 @@
 <script>
 import { ref, onMounted, onUnmounted, computed, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import { useWebSocket } from './composables/useWebSocket';
+import { connect as wsConnect, disconnect as wsDisconnect } from './services/websocket';
 import { onAuthChange, logout } from './services/authService';
 import api from './services/api';
 import Login from './views/Login.vue';
@@ -255,7 +255,6 @@ export default {
     const plantsError = ref('');
     const plcsLoading = ref(false);
     const plcsError = ref('');
-    const { connect, disconnect } = useWebSocket();
 
     // ===== Dashboard Builder (ruta dedicada) =====
     const builderData = ref({
@@ -357,9 +356,9 @@ export default {
     }
 
     function matchesSelection(msg) {
-      if (!selectedPlant.value?.plantId) return false;
-      if (msg.plant !== selectedPlant.value.plantId) return false;
-      if (selectedPlc.value?.plcThingName && msg.plcThingName !== selectedPlc.value.plcThingName) return false;
+      if (!selectedPlant.value?.id) return false;
+      if (msg.plantId !== selectedPlant.value.id) return false;
+      if (selectedPlc.value?.id && msg.plcId !== selectedPlc.value.id) return false;
       return true;
     }
 
@@ -368,8 +367,8 @@ export default {
         if (!matchesSelection(msg)) return;
         // Agregar a stream de datos (solo últimos 100 para visualización)
         telemetryEvents.value.unshift({
-          id: `${msg.plant || 'plant'}-${msg.plcThingName || 'plc'}-${msg.ts}`,
-          plant: msg.plant,
+          id: `${msg.plantId || 'plant'}-${msg.plcId || msg.plcThingName || 'plc'}-${msg.ts}`,
+          plant: msg.plantId,
           plcThingName: msg.plcThingName,
           ts: msg.ts,
           values: msg.values,
@@ -408,7 +407,10 @@ export default {
             await loadPlants();
             await loadTenantInfo();
             // Conectar WebSocket solo si es operador
-            connect({
+            wsConnect({
+              tenantId: tenantInfo.value?.id,
+              plantId: selectedPlant.value?.id,
+              plcId: selectedPlc.value?.id,
               onConnectionChange: (connected) => {
                 wsConnected.value = connected;
               },
@@ -419,7 +421,7 @@ export default {
           } else {
             // Admin-only: no levantar plantas ni WS
             wsConnected.value = false;
-            disconnect();
+            wsDisconnect();
             currentTab.value = 'admin';
             adminTab.value = 'tenants';
           }
@@ -441,7 +443,7 @@ export default {
           plantsError.value = '';
           plcsError.value = '';
           resetTelemetry();
-          disconnect();
+          wsDisconnect();
         }
       });
 
@@ -452,7 +454,7 @@ export default {
     });
 
     onUnmounted(() => {
-      disconnect();
+      wsDisconnect();
     });
 
     // Si cambian params/ruta, recargar builder o aplicar query tabs (F5/entrada directa)
@@ -482,7 +484,7 @@ export default {
         plantsError.value = '';
         plcsError.value = '';
         resetTelemetry();
-        disconnect();
+        wsDisconnect();
       }
     };
 
@@ -567,9 +569,9 @@ export default {
       dashboardLoading.value = true;
       dashboardError.value = '';
       try {
-        dashboardData.value = await api.getPublicDashboard(
+      dashboardData.value = await api.getPublicDashboard(
           tenantInfo.value.slug,
-          selectedPlant.value.plantId,
+          selectedPlant.value.id,
           selectedPlc.value.plcThingName
         );
       } catch (error) {
@@ -599,11 +601,23 @@ export default {
       loadPlcs(plant);
       resetTelemetry();
       loadDashboard();
+      // Refiltrar WS por plantId (UUID) y plcId actual (si existe)
+      wsConnect({
+        tenantId: tenantInfo.value?.id,
+        plantId: selectedPlant.value?.id,
+        plcId: selectedPlc.value?.id,
+      });
     });
 
     watch(selectedPlc, () => {
       resetTelemetry();
       loadDashboard();
+      // Refiltrar WS por plantId/plcId (UUID)
+      wsConnect({
+        tenantId: tenantInfo.value?.id,
+        plantId: selectedPlant.value?.id,
+        plcId: selectedPlc.value?.id,
+      });
     });
 
     watch(tenantInfo, () => {

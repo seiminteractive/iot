@@ -16,7 +16,13 @@ const publicDashboardsRoutes: FastifyPluginAsync = async (fastify) => {
     }
 
     const plant = await prisma.plant.findFirst({
-      where: { tenantId: tenant.id, plantId },
+      where: {
+        tenantId: tenant.id,
+        OR: [
+          { id: plantId }, // Buscar por UUID
+          { plantId }, // Buscar por plantId técnico (backward compatibility)
+        ],
+      },
       select: { id: true, plantId: true, name: true },
     });
     if (!plant) {

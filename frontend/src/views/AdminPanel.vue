@@ -348,7 +348,7 @@
             <label for="user-tenant">Tenant</label>
             <select id="user-tenant" v-model="userForm.tenantId" required>
               <option value="" disabled>Seleccionar</option>
-              <option v-for="tenant in tenants" :key="tenant.id" :value="tenant.slug">
+              <option v-for="tenant in tenants" :key="tenant.id" :value="tenant.id">
                 {{ tenant.slug }}
               </option>
             </select>
@@ -364,12 +364,37 @@
           </div>
           <div class="form-field full-width">
             <label for="user-plants">Acceso a plantas</label>
-            <input id="user-plants" v-model="userForm.plantAccess" placeholder="planta-1, planta-2 o *" />
-            <span class="helper">Separar con comas. Usar * para acceso total.</span>
+            <label class="toggle-label" style="margin-bottom: 0.5rem;">
+              <input
+                type="checkbox"
+                :checked="userForm.allPlants"
+                class="toggle-input"
+                @change="(e) => { userForm.allPlants = e.target.checked; if (userForm.allPlants) userForm.plantAccess = []; }"
+              />
+              <span class="toggle-switch"></span>
+              <span class="toggle-text">Todas las plantas del tenant</span>
+            </label>
+            <PlantAutocomplete
+              v-if="!userForm.allPlants"
+              :available-plants="plantsForUserForm"
+              :model-value="userForm.plantAccess"
+              @update:model-value="userForm.plantAccess = $event"
+              placeholder="Seleccionar plantas..."
+            />
+            <span class="helper">Selecciona las plantas a las que tendrá acceso este usuario.</span>
           </div>
           <div class="form-actions">
-            <button type="submit" class="btn-primary" :disabled="!userForm.email || !userForm.password">
-              Crear usuario
+            <button 
+              type="submit" 
+              class="btn-primary" 
+              :disabled="!userForm.email || !userForm.password || createUserLoading"
+            >
+              <span v-if="!createUserLoading">Crear usuario</span>
+              <span v-else class="loading-spinner">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <circle cx="12" cy="12" r="10" stroke-dasharray="31.4" stroke-dashoffset="10" />
+                </svg>
+              </span>
             </button>
           </div>
         </form>
@@ -394,7 +419,7 @@
               <span class="list-item-subtitle">{{ user.tenantId || '—' }} · {{ user.role || '—' }}</span>
             </div>
             <div class="list-item-badge">
-              {{ user.plantAccess?.join(', ') || '*' }}
+              {{ getUserPlantNames(user) }}
             </div>
             <div class="list-item-actions">
               <button class="btn-icon" title="Editar" @click="openEditUserModal(user)">
@@ -425,7 +450,7 @@
             <label>Tenant</label>
             <select v-model="claimsForm.tenantId">
               <option value="">Sin cambio</option>
-              <option v-for="tenant in tenants" :key="tenant.id" :value="tenant.slug">
+              <option v-for="tenant in tenants" :key="tenant.id" :value="tenant.id">
                 {{ tenant.slug }}
               </option>
             </select>
@@ -442,7 +467,23 @@
           </div>
           <div class="form-field">
             <label>Acceso a plantas</label>
-            <input v-model="claimsForm.plantAccess" placeholder="planta-1, planta-2 o *" />
+            <label class="toggle-label" style="margin-bottom: 0.5rem;">
+              <input
+                type="checkbox"
+                :checked="claimsForm.allPlants"
+                class="toggle-input"
+                @change="(e) => { claimsForm.allPlants = e.target.checked; claimsForm.plantAccessTouched = true; if (claimsForm.allPlants) claimsForm.plantAccess = []; }"
+              />
+              <span class="toggle-switch"></span>
+              <span class="toggle-text">Todas las plantas del tenant</span>
+            </label>
+            <PlantAutocomplete
+              v-if="!claimsForm.allPlants"
+              :available-plants="claimsForm.tenantId ? plants.value.filter(p => p.tenantId === claimsForm.tenantId) : plants.value"
+              :model-value="claimsForm.plantAccess"
+              @update:model-value="(v) => { claimsForm.plantAccess = v; claimsForm.plantAccessTouched = true; if (v.length > 0) claimsForm.allPlants = false; }"
+              placeholder="Seleccionar plantas..."
+            />
           </div>
           <div class="form-field">
             <label class="checkbox-label">
@@ -585,7 +626,7 @@
               <label>Tenant</label>
               <select v-model="editUserModal.tenantId">
                 <option value="">Sin cambio</option>
-                <option v-for="tenant in tenants" :key="tenant.id" :value="tenant.slug">
+                <option v-for="tenant in tenants" :key="tenant.id" :value="tenant.id">
                   {{ tenant.slug }}
                 </option>
               </select>
@@ -602,9 +643,22 @@
             </div>
             <div class="form-field">
               <label>Acceso a plantas</label>
-              <input 
-                v-model="editUserModal.plantAccess" 
-                placeholder="planta-1, planta-2 o *"
+              <label class="toggle-label" style="margin-bottom: 0.5rem;">
+                <input
+                  type="checkbox"
+                  :checked="editUserModal.allPlants"
+                  class="toggle-input"
+                  @change="(e) => { editUserModal.allPlants = e.target.checked; editUserModal.plantAccessTouched = true; if (editUserModal.allPlants) editUserModal.plantAccess = []; }"
+                />
+                <span class="toggle-switch"></span>
+                <span class="toggle-text">Todas las plantas del tenant</span>
+              </label>
+              <PlantAutocomplete
+                v-if="!editUserModal.allPlants"
+                :available-plants="plantsForEditUserModal"
+                :model-value="editUserModal.plantAccess"
+                @update:model-value="(v) => { editUserModal.plantAccess = v; editUserModal.plantAccessTouched = true; if (v.length > 0) editUserModal.allPlants = false; }"
+                placeholder="Seleccionar plantas..."
               />
             </div>
             <div class="form-field checkbox-field">
@@ -628,13 +682,16 @@
 <script setup>
 import { computed, onMounted, ref, watch, nextTick, onBeforeUnmount } from 'vue';
 import { useRouter } from 'vue-router';
+import { useToast } from 'vue-toastification';
 import { GridStack } from 'gridstack';
 import 'gridstack/dist/gridstack.min.css';
 import api from '../services/api';
 import PersistRules from './PersistRules.vue';
+import PlantAutocomplete from '../components/PlantAutocomplete.vue';
 import { connect as wsConnect, disconnect as wsDisconnect, onMessage } from '../services/websocket';
 
 const router = useRouter();
+const toast = useToast();
 
 const props = defineProps({
   tab: {
@@ -662,8 +719,11 @@ const userSearch = ref('');
 // Forms
 const tenantForm = ref({ slug: '', name: '', iconUrl: '' });
 const plantForm = ref({ tenantId: '', province: '', plantId: '', name: '' });
-const userForm = ref({ email: '', password: '', tenantId: '', role: 'viewer', plantAccess: '' });
-const claimsForm = ref({ uid: '', tenantId: '', role: '', plantAccess: '', disabled: false });
+const userForm = ref({ email: '', password: '', tenantId: '', role: 'viewer', allPlants: true, plantAccess: [] });
+const claimsForm = ref({ uid: '', tenantId: '', role: '', allPlants: true, plantAccess: [], disabled: false, plantAccessTouched: false });
+
+// Loading states
+const createUserLoading = ref(false);
 
 // Dashboard
 const selectedTenantId = ref('');
@@ -697,8 +757,10 @@ const editUserModal = ref({
   email: '',
   tenantId: '',
   role: '',
-  plantAccess: '',
+  allPlants: true,
+  plantAccess: [],
   disabled: false,
+  plantAccessTouched: false,
 });
 
 // Computed
@@ -768,6 +830,33 @@ const selectedPlant = computed(() =>
   plants.value.find(plant => plant.id === selectedPlantId.value) || null
 );
 
+// Plantas disponibles para el usuario que se está creando/editando
+const plantsForUserForm = computed(() => {
+  if (!userForm.value.tenantId) return [];
+  return plants.value.filter(plant => plant.tenantId === userForm.value.tenantId);
+});
+
+const plantsForEditUserModal = computed(() => {
+  if (!editUserModal.value.tenantId) return plants.value;
+  return plants.value.filter(plant => plant.tenantId === editUserModal.value.tenantId);
+});
+
+// Helper para mostrar plantas del usuario de forma legible
+const getUserPlantNames = (user) => {
+  if (!user.plantAccess || user.plantAccess.length === 0) return 'Todas';
+  return user.plantAccess
+    .map(plantId => {
+      const plant = plants.value.find(p => p.id === plantId);
+      return plant ? `${plant.province} - ${plant.name || plant.plantId}` : plantId;
+    })
+    .join(', ');
+};
+
+// Notificaciones
+const showNotification = (message, type = 'info') => {
+  toast[type](message);
+};
+
 // API calls
 const refreshTenants = async () => {
   tenants.value = await api.getTenants();
@@ -812,25 +901,36 @@ const handleCreatePlant = async () => {
 };
 
 const handleCreateUser = async () => {
-  await api.createUserAdmin({
-    email: userForm.value.email,
-    password: userForm.value.password,
-    tenantId: userForm.value.tenantId,
-    role: userForm.value.role,
-    plantAccess: parsePlantAccess(userForm.value.plantAccess),
-  });
-  userForm.value = { email: '', password: '', tenantId: '', role: 'viewer', plantAccess: '' };
-  await refreshUsers();
+  createUserLoading.value = true;
+  try {
+    await api.createUserAdmin({
+      email: userForm.value.email,
+      password: userForm.value.password,
+      tenantId: userForm.value.tenantId,
+      role: userForm.value.role,
+      plantAccess: userForm.value.allPlants ? [] : userForm.value.plantAccess,
+    });
+    userForm.value = { email: '', password: '', tenantId: '', role: 'viewer', allPlants: true, plantAccess: [] };
+    showNotification('Usuario creado exitosamente', 'success');
+    await refreshUsers();
+  } catch (error) {
+    showNotification(error.response?.data?.error || 'Error al crear usuario', 'error');
+  } finally {
+    createUserLoading.value = false;
+  }
 };
 
 const handleUpdateClaims = async () => {
-  await api.updateUserClaims(claimsForm.value.uid, {
+  const payload = {
     tenantId: claimsForm.value.tenantId || undefined,
     role: claimsForm.value.role || undefined,
-    plantAccess: parsePlantAccess(claimsForm.value.plantAccess),
     disabled: claimsForm.value.disabled,
-  });
-  claimsForm.value = { uid: '', tenantId: '', role: '', plantAccess: '', disabled: false };
+  };
+  if (claimsForm.value.plantAccessTouched) {
+    payload.plantAccess = claimsForm.value.allPlants ? [] : claimsForm.value.plantAccess;
+  }
+  await api.updateUserClaims(claimsForm.value.uid, payload);
+  claimsForm.value = { uid: '', tenantId: '', role: '', allPlants: true, plantAccess: [], disabled: false, plantAccessTouched: false };
   await refreshUsers();
 };
 
@@ -839,8 +939,10 @@ const prefillClaims = (user) => {
     uid: user.uid,
     tenantId: user.tenantId || '',
     role: user.role || '',
-    plantAccess: user.plantAccess?.join(',') || '',
+    allPlants: !user.plantAccess || user.plantAccess.length === 0 || user.plantAccess.includes('*'),
+    plantAccess: user.plantAccess || [], // Ya viene como array de IDs
     disabled: user.disabled || false,
+    plantAccessTouched: false,
   };
 };
 
@@ -952,8 +1054,10 @@ const openEditUserModal = (user) => {
     email: user.email,
     tenantId: user.tenantId || '',
     role: user.role || '',
-    plantAccess: user.plantAccess?.join(', ') || '*',
+    allPlants: !user.plantAccess || user.plantAccess.length === 0 || user.plantAccess.includes('*'),
+    plantAccess: user.plantAccess || [], // Ya viene como array de IDs
     disabled: user.disabled || false,
+    plantAccessTouched: false,
   };
 };
 
@@ -962,7 +1066,9 @@ const executeEditUser = async () => {
     const payload = {};
     if (editUserModal.value.tenantId) payload.tenantId = editUserModal.value.tenantId;
     if (editUserModal.value.role) payload.role = editUserModal.value.role;
-    if (editUserModal.value.plantAccess) payload.plantAccess = parsePlantAccess(editUserModal.value.plantAccess);
+    if (editUserModal.value.plantAccessTouched) {
+      payload.plantAccess = editUserModal.value.allPlants ? [] : editUserModal.value.plantAccess;
+    }
     payload.disabled = editUserModal.value.disabled;
 
     await api.updateUserClaims(editUserModal.value.uid, payload);
@@ -1018,12 +1124,6 @@ const executeDelete = async () => {
     console.error('Error deleting:', error);
   }
   deleteModal.value.show = false;
-};
-
-// Utils
-const parsePlantAccess = (value) => {
-  if (!value) return [];
-  return value.split(',').map(item => item.trim()).filter(Boolean);
 };
 
 // Init
@@ -1618,6 +1718,27 @@ onMounted(async () => {
 
 .modal-form .modal-actions {
   margin-top: 0.5rem;
+}
+
+/* Loading spinner */
+.loading-spinner {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.loading-spinner svg {
+  animation: spin 1s linear infinite;
+  stroke-dashoffset: 0;
+}
+
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 /* Responsive */

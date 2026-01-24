@@ -8,18 +8,18 @@ const persistRulesRoutes: FastifyPluginAsync = async (fastify) => {
   // Resuelve el tenant: admins internos usan query param, usuarios normales usan su tenant asignado
   const resolveTenant = async (request: any, reply: any) => {
     const userTenant = request.user?.tenantId;
-    const query = request.query as { tenant?: string };
-    const tenantSlug = query?.tenant?.trim();
+    const query = request.query as { tenantId?: string };
+    const tenantIdFromQuery = query?.tenantId?.trim();
 
-    logger.info({ userTenant, tenantSlug, user: request.user }, 'resolveTenant called');
+    // (no debug logs en producción)
 
     // Si es admin interno, usar query param (puede ver todos los tenants)
     if (userTenant === '__internal__') {
-      if (!tenantSlug) {
-        reply.code(400).send({ error: 'Missing tenant query param (required for admin)' });
+      if (!tenantIdFromQuery) {
+        reply.code(400).send({ error: 'Missing tenantId query param (required for admin)' });
         return null;
       }
-      const tenant = await prisma.tenant.findUnique({ where: { slug: tenantSlug } });
+      const tenant = await prisma.tenant.findUnique({ where: { id: tenantIdFromQuery } });
       if (!tenant) {
         reply.code(404).send({ error: 'Tenant not found' });
         return null;
@@ -71,14 +71,14 @@ const persistRulesRoutes: FastifyPluginAsync = async (fastify) => {
 
   fastify.get('/persist-rules', async (request, reply) => {
     const isAdmin = requireInternal(request);
-    const query = request.query as { tenant?: string };
-    const tenantSlug = query?.tenant?.trim();
+    const query = request.query as { tenantId?: string };
+    const tenantIdFromQuery = query?.tenantId?.trim();
 
     // Admin sin filtro de tenant: devuelve TODAS las reglas de todos los tenants
-    if (isAdmin && !tenantSlug) {
+    if (isAdmin && !tenantIdFromQuery) {
       const rules = await prisma.persistRule.findMany({
         include: {
-          tenant: { select: { slug: true, name: true } },
+          tenant: { select: { id: true, slug: true, name: true } },
           plant: { select: { plantId: true, name: true } },
           gateway: { select: { gatewayId: true } },
           plc: { select: { plcThingName: true, name: true } },
@@ -99,7 +99,7 @@ const persistRulesRoutes: FastifyPluginAsync = async (fastify) => {
     const rules = await prisma.persistRule.findMany({
       where: { tenantId: tenant.id },
       include: {
-        tenant: { select: { slug: true, name: true } },
+        tenant: { select: { id: true, slug: true, name: true } },
         plant: { select: { plantId: true, name: true } },
         gateway: { select: { gatewayId: true } },
         plc: { select: { plcThingName: true, name: true } },
@@ -123,6 +123,7 @@ const persistRulesRoutes: FastifyPluginAsync = async (fastify) => {
       plcId?: string | null;
       metricId?: string | null;
       mode?: string | null;
+      intervalMinutes?: number | null;
       aggregate?: string | null;
       retentionDays?: number | null;
     };
@@ -130,10 +131,14 @@ const persistRulesRoutes: FastifyPluginAsync = async (fastify) => {
     if (!body?.metricId || !body?.mode) {
       return reply.code(400).send({ error: 'Missing metricId or mode' });
     }
-    const allowedModes = ['raw', 'hourly', 'both', 'none'];
+    const allowedModes = ['raw', 'interval'];
     const allowedAggregates = ['sum', 'avg', 'min', 'max', 'last'];
     if (!allowedModes.includes(body.mode)) {
-      return reply.code(400).send({ error: 'Invalid mode' });
+      return reply.code(400).send({ error: 'Invalid mode. Use "raw" or "interval"' });
+    }
+    // Si mode es interval, intervalMinutes es requerido
+    if (body.mode === 'interval' && (!body.intervalMinutes || body.intervalMinutes < 1)) {
+      return reply.code(400).send({ error: 'intervalMinutes is required for interval mode (min: 1)' });
     }
     if (body.aggregate && !allowedAggregates.includes(body.aggregate)) {
       return reply.code(400).send({ error: 'Invalid aggregate' });
@@ -163,6 +168,7 @@ const persistRulesRoutes: FastifyPluginAsync = async (fastify) => {
         plcId,
         metricId: body.metricId.trim(),
         mode: body.mode as any,
+        intervalMinutes: body.mode === 'interval' ? body.intervalMinutes : null,
         aggregate: body.aggregate ? (body.aggregate as any) : null,
         retentionDays: typeof body.retentionDays === 'number' ? body.retentionDays : 7,
       },
@@ -185,6 +191,7 @@ const persistRulesRoutes: FastifyPluginAsync = async (fastify) => {
       plcId?: string | null;
       metricId?: string | null;
       mode?: string | null;
+      intervalMinutes?: number | null;
       aggregate?: string | null;
       retentionDays?: number | null;
     };
@@ -196,8 +203,14 @@ const persistRulesRoutes: FastifyPluginAsync = async (fastify) => {
       return reply.code(404).send({ error: 'Rule not found' });
     }
 
-    if (body.mode && !['raw', 'hourly', 'both', 'none'].includes(body.mode)) {
-      return reply.code(400).send({ error: 'Invalid mode' });
+    const finalMode = body.mode || existing.mode;
+    if (body.mode && !['raw', 'interval'].includes(body.mode)) {
+      return reply.code(400).send({ error: 'Invalid mode. Use "raw" or "interval"' });
+    }
+    // Si mode es interval, intervalMinutes es requerido
+    const finalIntervalMinutes = body.intervalMinutes ?? existing.intervalMinutes;
+    if (finalMode === 'interval' && (!finalIntervalMinutes || finalIntervalMinutes < 1)) {
+      return reply.code(400).send({ error: 'intervalMinutes is required for interval mode (min: 1)' });
     }
     if (body.aggregate && !['sum', 'avg', 'min', 'max', 'last'].includes(body.aggregate)) {
       return reply.code(400).send({ error: 'Invalid aggregate' });
@@ -226,7 +239,8 @@ const persistRulesRoutes: FastifyPluginAsync = async (fastify) => {
         gatewayId,
         plcId,
         metricId: body.metricId?.trim() || existing.metricId,
-        mode: (body.mode as any) || existing.mode,
+        mode: finalMode as any,
+        intervalMinutes: finalMode === 'interval' ? finalIntervalMinutes : null,
         aggregate: body.aggregate ? (body.aggregate as any) : null,
         retentionDays: typeof body.retentionDays === 'number' ? body.retentionDays : existing.retentionDays,
       },
