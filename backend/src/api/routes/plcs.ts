@@ -275,6 +275,7 @@ const plcsRoutes: FastifyPluginAsync = async (fastify) => {
         plantId: true,
         province: true,
         name: true,
+        aiConfig: true,
       },
       orderBy: [
         { province: 'asc' },

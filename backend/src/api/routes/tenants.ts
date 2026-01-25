@@ -17,6 +17,7 @@ const tenantsRoutes: FastifyPluginAsync = async (fastify) => {
       slug: tenant.slug,
       name: tenant.name,
       iconUrl: tenant.iconUrl,
+      aiConfig: tenant.aiConfig ?? null,
     });
   });
 };

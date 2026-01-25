@@ -29,6 +29,7 @@ model Tenant {
   slug      String   @unique
   name      String
   iconUrl   String?  @map("icon_url")
+  aiConfig  Json?    @map("ai_config") @db.JsonB
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
 
   plants          Plant[]
@@ -40,6 +41,9 @@ model Tenant {
   persistRules    PersistRule[]
   telemetryAggregated TelemetryAggregated[]
   plcDashboards   PlcDashboard[]
+  metricCatalog   MetricCatalog[]
+  aiInsights      AIInsight[]
+  companyOverviewAccess TenantCompanyOverviewAccess[]
 
   @@map("tenants")
 }
@@ -50,6 +54,7 @@ model Plant {
   province  String
   plantId   String   @map("plant_id")
   name      String?
+  aiConfig  Json?    @map("ai_config") @db.JsonB
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
 
   tenant          Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
@@ -61,6 +66,8 @@ model Plant {
   alarms          Alarm[]
   plcDashboards   PlcDashboard[]
   persistRules    PersistRule[]
+  aiInsights      AIInsight[]
+  metricCatalog   MetricCatalog[]
 
   @@unique([tenantId, province, plantId])
   @@index([tenantId, province])
@@ -110,11 +117,112 @@ model Plc {
   alarms          Alarm[]
   dashboards      PlcDashboard[]
   persistRules    PersistRule[]
+  metricCatalog   MetricCatalog[]
 
   @@unique([tenantId, plantId, plcThingName])
   @@index([tenantId, plantId])
   @@index([tenantId, plantId, gatewayId])
   @@map("plcs")
+}
+
+model GlobalConfig {
+  key       String   @id
+  value     String   @db.Text
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz
+  updatedBy String?  @map("updated_by")
+
+  @@map("global_config")
+}
+
+model TenantCompanyOverviewAccess {
+  id         String   @id @default(uuid()) @db.Uuid
+  tenantId   String   @map("tenant_id") @db.Uuid
+  emailLower String   @map("email_lower")
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt  DateTime @updatedAt @map("updated_at") @db.Timestamptz
+  createdBy  String?  @map("created_by")
+  updatedBy  String?  @map("updated_by")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, emailLower])
+  @@index([tenantId])
+  @@map("tenant_company_overview_access")
+}
+
+model MetricCatalog {
+  id           String   @id @default(uuid()) @db.Uuid
+  tenantId     String   @map("tenant_id") @db.Uuid
+  plantId      String?  @map("plant_id") @db.Uuid
+  plcId        String?  @map("plc_id") @db.Uuid
+  metricId     String   @map("metric_id")
+
+  label        String
+  unit         String?
+  description  String?  @db.Text
+
+  enabledForAI Boolean  @default(true) @map("enabled_for_ai")
+  aiPriority   Int      @default(0) @map("ai_priority")
+  keyForCEO    Boolean  @default(false) @map("key_for_ceo")
+  keyForPlant  Boolean  @default(false) @map("key_for_plant")
+
+  catalogVersion Int    @default(1) @map("catalog_version")
+  updatedBy      String? @map("updated_by")
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt      DateTime @updatedAt @map("updated_at") @db.Timestamptz
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  plant  Plant? @relation(fields: [plantId], references: [id], onDelete: Cascade)
+  plc    Plc?   @relation(fields: [plcId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, plantId, plcId, metricId])
+  @@index([tenantId, metricId])
+  @@index([tenantId, plantId, metricId])
+  @@index([tenantId, plantId, plcId, metricId])
+  @@map("metric_catalog")
+}
+
+model AIInsight {
+  id              String   @id @default(uuid()) @db.Uuid
+  tenantId        String   @map("tenant_id") @db.Uuid
+  plantId         String?  @map("plant_id") @db.Uuid // null = company overview
+  type            String   // 'plant' | 'company'
+  status          String   @default("pending") // pending | running | success | error
+
+  // Output for UI (nullable while pending/running/error)
+  contentJson      Json?    @map("content_json") @db.JsonB
+  contentMarkdown  String?  @map("content_markdown") @db.Text
+
+  // Audit (nullable while pending/running)
+  inputSnapshotJson Json?   @map("input_snapshot_json") @db.JsonB
+  inputHash         String? @map("input_hash")
+  promptVersion     String? @map("prompt_version")
+  systemPromptVer   String? @map("system_prompt_ver")
+  catalogVersion    Int     @default(1) @map("catalog_version")
+  stale             Boolean @default(false)
+
+  modelUsed         String? @map("model_used")
+  promptTokens      Int     @default(0) @map("prompt_tokens")
+  completionTokens  Int     @default(0) @map("completion_tokens")
+  totalTokens       Int     @default(0) @map("total_tokens")
+
+  periodStart       DateTime @map("period_start") @db.Timestamptz
+  periodEnd         DateTime @map("period_end") @db.Timestamptz
+  expiresAt         DateTime @map("expires_at") @db.Timestamptz
+
+  errorCode         String?  @map("error_code")
+  errorMessage      String?  @map("error_message") @db.Text
+
+  generatedAt       DateTime? @map("generated_at") @db.Timestamptz
+  createdAt         DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt         DateTime  @updatedAt @map("updated_at") @db.Timestamptz
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  plant  Plant? @relation(fields: [plantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, plantId, type])
+  @@index([tenantId, type, generatedAt(sort: Desc)])
+  @@map("ai_insights")
 }
 
 model TelemetryEvent {

@@ -21,9 +21,13 @@ import chartDataRoutes from './api/routes/chartData.js';
 import adminRoutes from './api/routes/admin.js';
 import publicDashboardsRoutes from './api/routes/publicDashboards.js';
 import tenantsRoutes from './api/routes/tenants.js';
+import aiRoutes from './api/routes/ai.js';
+import aiAdminRoutes from './api/routes/aiAdmin.js';
 
 // WebSocket
 import realtimePlugin from './ws/realtime.js';
+import { startAIWorker } from './services/ai/worker.js';
+import { startAIScheduler } from './services/ai/scheduler.js';
 
 const fastify = Fastify({
   logger: logger as any,
@@ -59,6 +63,8 @@ async function start() {
     await fastify.register(persistRulesRoutes, { prefix: '/api' });
     await fastify.register(chartDataRoutes, { prefix: '/api' });
     await fastify.register(adminRoutes, { prefix: '/api' });
+    await fastify.register(aiAdminRoutes, { prefix: '/api' });
+    await fastify.register(aiRoutes, { prefix: '/api' });
     await fastify.register(tenantsRoutes, { prefix: '/api' });
     await fastify.register(publicDashboardsRoutes);
 
@@ -75,6 +81,10 @@ async function start() {
 
     // Init Redis Pub/Sub for WebSocket fanout
     await initWsPubSub();
+
+    // Start AI components (optional via env flags)
+    startAIScheduler();
+    await startAIWorker();
 
     // Connect to AWS IoT Core
     await mqttClient.connect();

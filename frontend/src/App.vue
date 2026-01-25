@@ -60,6 +60,14 @@
           :error="dashboardError"
         />
 
+        <!-- IA Tab (Insights) -->
+        <AIInsights
+          v-if="currentTab === 'ai'"
+          :tenant="tenantInfo"
+          :selectedPlant="selectedPlant"
+          :isAdmin="isAdmin"
+        />
+
         <!-- Admin Tab -->
         <AdminPanel v-if="currentTab === 'admin'" :tab="adminTab" />
         </main>
@@ -101,6 +109,19 @@
             </svg>
             <span>Mediciones</span>
           </button>
+
+          <button
+            class="nav-item"
+            :class="{ active: currentTab === 'ai' }"
+            @click="currentTab = 'ai'"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M12 2a7 7 0 0 0-4 12.74V17a2 2 0 0 0 2 2h1v3h2v-3h1a2 2 0 0 0 2-2v-2.26A7 7 0 0 0 12 2z"/>
+              <path d="M9 17h6"/>
+            </svg>
+            <span>IA</span>
+          </button>
+
           <button
             v-if="showAdminTab"
             class="nav-item"
@@ -192,6 +213,14 @@
           <span>Dashboards</span>
         </button>
 
+        <button class="admin-nav-item" :class="{ active: adminTab === 'ai' }" @click="adminTab = 'ai'" type="button">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M12 2a7 7 0 0 0-4 12.74V17a2 2 0 0 0 2 2h1v3h2v-3h1a2 2 0 0 0 2-2v-2.26A7 7 0 0 0 12 2z"/>
+            <path d="M9 17h6"/>
+          </svg>
+          <span>IA</span>
+        </button>
+
         <button class="admin-nav-item" @click="handleLogout" type="button">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
@@ -218,6 +247,7 @@ import DynamicDashboard from './views/DynamicDashboard.vue';
 import Plants from './views/Plants.vue';
 import AdminPanel from './views/AdminPanel.vue';
 import DashboardBuilder from './views/DashboardBuilder.vue';
+import AIInsights from './views/AIInsights.vue';
 
 export default {
   name: 'App',
@@ -228,6 +258,7 @@ export default {
     Plants,
     AdminPanel,
     DashboardBuilder,
+    AIInsights,
   },
   setup() {
     const route = useRoute();

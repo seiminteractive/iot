@@ -560,6 +560,11 @@
       </div>
     </div>
 
+    <!-- IA TAB -->
+    <div v-if="tab === 'ai'" class="section">
+      <AdminAI :tenants="tenants" :plants="plants" />
+    </div>
+
     <!-- Delete confirmation modal -->
     <Teleport to="body">
       <div v-if="deleteModal.show" class="modal-overlay" @click.self="deleteModal.show = false">
@@ -688,6 +693,7 @@ import 'gridstack/dist/gridstack.min.css';
 import api from '../services/api';
 import PersistRules from './PersistRules.vue';
 import PlantAutocomplete from '../components/PlantAutocomplete.vue';
+import AdminAI from '../components/AdminAI.vue';
 import { connect as wsConnect, disconnect as wsDisconnect, onMessage } from '../services/websocket';
 
 const router = useRouter();
@@ -1126,6 +1132,9 @@ const executeDelete = async () => {
   deleteModal.value.show = false;
 };
 
+// WS unsubscribe holder (avoid registering lifecycle hooks inside onMounted)
+let wsUnsubscribe = null;
+
 // Init
 onMounted(async () => {
   await refreshTenants();
@@ -1134,7 +1143,7 @@ onMounted(async () => {
   await refreshAllPlcs();
 
   // Conectar WebSocket para recibir cambios de estado de PLCs
-  const unsubscribe = onMessage((msg) => {
+  wsUnsubscribe = onMessage((msg) => {
     if (msg.type === 'plc_state_changed') {
       // Actualizar el PLC en la lista
       const plcIndex = allPlcs.value.findIndex(p => p.id === msg.plcId);
@@ -1144,11 +1153,10 @@ onMounted(async () => {
       }
     }
   });
+});
 
-  // Cleanup al desmontar
-  onBeforeUnmount(() => {
-    unsubscribe?.();
-  });
+onBeforeUnmount(() => {
+  wsUnsubscribe?.();
 });
 </script>
 <style scoped>

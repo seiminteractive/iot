@@ -3,6 +3,7 @@ import Root from './Root.vue';
 import { router } from './router';
 import Toast from 'vue-toastification';
 import 'vue-toastification/dist/index.css';
+import './styles/admin-shared.css';
 
 const options = {
   position: 'bottom-right',

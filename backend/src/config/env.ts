@@ -53,6 +53,19 @@ const envSchema = z.object({
   // Redis
   REDIS_URL: z.string().default('redis://localhost:6379'),
   REDIS_PREFIX: z.string().default('iot'),
+
+  // AI / OpenAI
+  OPENAI_API_KEY: z.string().default(''),
+  OPENAI_BASE_URL: z.string().default('https://api.openai.com/v1'),
+  OPENAI_DEFAULT_MODEL: z.string().default('gpt-4o-mini'),
+
+  AI_SCHEDULER_ENABLED: z.string().transform((v) => v === 'true').default('false'),
+  AI_WORKER_ENABLED: z.string().transform((v) => v === 'true').default('false'),
+  AI_WORKER_CONCURRENCY: z.string().transform(Number).default('2'),
+  AI_QUEUE_NAME: z.string().default('ai:jobs'),
+  AI_LOCK_TTL_MS: z.string().transform(Number).default('600000'),
+  AI_MAX_RETRIES: z.string().transform(Number).default('3'),
+  AI_MAX_OUTPUT_TOKENS: z.string().transform(Number).default('1200'),
 });
 
 export type Config = z.infer<typeof envSchema>;

@@ -43,6 +43,77 @@ const api = {
     return response.data;
   },
 
+  // Admin AI
+  async getAIGlobalConfig() {
+    const response = await apiClient.get('/api/admin/ai/global-config');
+    return response.data;
+  },
+
+  async updateAIGlobalConfig(payload) {
+    const response = await apiClient.put('/api/admin/ai/global-config', payload);
+    return response.data;
+  },
+
+  async getAITenantConfig(tenantId) {
+    const response = await apiClient.get(`/api/admin/ai/tenants/${tenantId}/config`);
+    return response.data;
+  },
+
+  async updateAITenantConfig(tenantId, aiConfig) {
+    const response = await apiClient.put(`/api/admin/ai/tenants/${tenantId}/config`, { aiConfig });
+    return response.data;
+  },
+
+  async getAIPlantConfig(plantId) {
+    const response = await apiClient.get(`/api/admin/ai/plants/${plantId}/config`);
+    return response.data;
+  },
+
+  async updateAIPlantConfig(plantId, aiConfig) {
+    const response = await apiClient.put(`/api/admin/ai/plants/${plantId}/config`, { aiConfig });
+    return response.data;
+  },
+
+  async getCompanyOverviewAccess(tenantId) {
+    const response = await apiClient.get(`/api/admin/ai/tenants/${tenantId}/company-overview-access`);
+    return response.data;
+  },
+
+  async addCompanyOverviewEmail(tenantId, email) {
+    const response = await apiClient.post(`/api/admin/ai/tenants/${tenantId}/company-overview-access`, { email });
+    return response.data;
+  },
+
+  async removeCompanyOverviewEmail(tenantId, emailLower) {
+    const response = await apiClient.delete(`/api/admin/ai/tenants/${tenantId}/company-overview-access/${encodeURIComponent(emailLower)}`);
+    return response.data;
+  },
+
+  async getMetricCatalog(tenantId, params = {}) {
+    const response = await apiClient.get(`/api/admin/ai/tenants/${tenantId}/metric-catalog`, { params });
+    return response.data;
+  },
+
+  async updateMetricCatalogEntry(id, payload) {
+    const response = await apiClient.put(`/api/admin/ai/metric-catalog/${id}`, payload);
+    return response.data;
+  },
+
+  async bootstrapMetricCatalog(tenantId) {
+    const response = await apiClient.post(`/api/admin/ai/tenants/${tenantId}/metric-catalog/bootstrap`);
+    return response.data;
+  },
+
+  async regenerateAIPlant(plantId) {
+    const response = await apiClient.post(`/api/admin/ai/regenerate/plant/${plantId}`);
+    return response.data;
+  },
+
+  async regenerateAICompany(tenantId) {
+    const response = await apiClient.post(`/api/admin/ai/regenerate/company/${tenantId}`);
+    return response.data;
+  },
+
   async getTenants() {
     const response = await apiClient.get('/api/admin/tenants');
     return response.data;
@@ -191,6 +262,17 @@ const api = {
 
   async getPlcState(plant, plcThingName) {
     const response = await apiClient.get(`/api/plcs/${plant}/${plcThingName}/state`);
+    return response.data;
+  },
+
+  // AI (user)
+  async getAIPlantInsight(plantId) {
+    const response = await apiClient.get(`/api/ai/insights/${plantId}`);
+    return response.data;
+  },
+
+  async getAICompanyInsight() {
+    const response = await apiClient.get(`/api/ai/insights/company`);
     return response.data;
   },
 
