@@ -64,8 +64,10 @@
         <AIInsights
           v-if="currentTab === 'ai'"
           :tenant="tenantInfo"
+          :plants="plants"
           :selectedPlant="selectedPlant"
           :isAdmin="isAdmin"
+          @update:selectedPlant="selectedPlant = $event"
         />
 
         <!-- Admin Tab -->
